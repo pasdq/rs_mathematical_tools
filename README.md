@@ -14,11 +14,13 @@ rs_mathematical_tools.exe input.txt
 
 In addition to supporting basic mathematical operations, it also supports simple linear equations.
 
-！[图片]（https://github.com/liueff/rs_mathematical_tools/assets/16551523/0d5e7f62-ca9b-438c-8c1f-fc1c589ea53b）
+![图片](https://github.com/liueff/rs_mathematical_tools/assets/16551523/2366a9a9-2595-4d21-a5c4-c921c8c65b29)
+
 
 It supports variable calculations.
 
-![图片](https://github.com/liueff/rs_mathematical_tools/assets/16551523/9ae7dade-a23f-4bad-b0b4-ac46cabe5990)
+![图片](https://github.com/liueff/rs_mathematical_tools/assets/16551523/07cb2489-c36d-4a8e-a489-cfcd4b985fa9)
+
 
 It supports cursor movement using the up and down arrow keys and the Tab key, as well as mouse operations. Additionally, it has several shortcut keys.
 
