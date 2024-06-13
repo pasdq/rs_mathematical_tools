@@ -12,9 +12,9 @@ or
 rs_mathematical_tools.exe input.txt
 ```
 
-除了支持基本的数学运算外，它还支持简单的线性方程。
+In addition to supporting basic mathematical operations, it also supports simple linear equations.
 
-![图片](https://github.com/liueff/rs_mathematical_tools/assets/16551523/0d5e7f62-ca9b-438c-8c1f-fc1c589ea53b)
+！[图片]（https://github.com/liueff/rs_mathematical_tools/assets/16551523/0d5e7f62-ca9b-438c-8c1f-fc1c589ea53b）
 
 It supports variable calculations.
 
