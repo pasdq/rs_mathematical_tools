@@ -1,4 +1,4 @@
-# RS 数学工具
+# RS Mathematical Tools
 
 >   This is a TUI math tool developed using Rust crossterm, which runs perfectly on both Linux and Windows platforms.
 
