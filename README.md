@@ -1,6 +1,6 @@
 # RS Mathematical Tools
 
->   This is a TUI math tool developed using Rust crossterm, which runs perfectly on both Linux and Windows platforms.
+>   This is a TUI mathematical tools (calculations) developed using Rust crossterm, which runs perfectly on both Linux and Windows platforms.
 
 ![234729](https://github.com/liueff/rs_mathematical_tools/assets/16551523/8ebe653f-0031-4c5f-af4d-d876e7295074)
 
