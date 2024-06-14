@@ -12,6 +12,9 @@ meval = "0.2.0"
 nalgebra = "0.32.5"
 regex = "1.5"
 
+#[target.x86_64-unknown-linux-musl]
+#linker = "musl-gcc"
+
 [profile.release]
 opt-level = 'z'  # 优化级别为“z”，这是最高级别的优化
 lto = true       # 启用 Link-Time Optimization（LTO）
