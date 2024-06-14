@@ -83,8 +83,8 @@ fn run_app(
     let mut current_row = 0;
     let mut current_pos = 0;
     let input_width = 36;
-    let output_width = 21;
-    let title = "[ ------------------ RS Mathematical Tools V1.0 ------------------- ]";
+    let output_width = 23;
+    let title = "[ ----------------- RS Mathematical Tools V1.1.0 ------------------ ]";
     let mut show_saved_message = false;
 
     queue!(stdout, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
@@ -97,8 +97,7 @@ fn run_app(
         let mut buffer = Vec::new();
 
         for (i, input) in inputs.iter().enumerate() {
-            let label = format!(" {}", (b'A' + (i as u8)) as char);
-            let display_label = format!(" {}", label); // Label with spaces for display purposes
+            let label = (b'A' + (i as u8)) as char;
             let result = if input.trim().is_empty() {
                 "".to_string()
             } else {
@@ -119,7 +118,7 @@ fn run_app(
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
-                                display_label,
+                                label,
                                 result,
                                 input,
                                 width = output_width,
@@ -138,7 +137,7 @@ fn run_app(
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
-                                    display_label,
+                                    label,
                                     result,
                                     input,
                                     width = output_width,
@@ -155,7 +154,7 @@ fn run_app(
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
-                                    display_label,
+                                    label,
                                     result,
                                     input,
                                     width = output_width,
@@ -175,7 +174,7 @@ fn run_app(
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
-                                display_label,
+                                label,
                                 result,
                                 input,
                                 width = output_width,
@@ -192,7 +191,7 @@ fn run_app(
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
-                                display_label,
+                                label,
                                 result,
                                 input,
                                 width = output_width,
@@ -205,9 +204,9 @@ fn run_app(
             }
 
             if result != "Error" {
-                variables.insert(label.trim().to_string(), result.clone()); // Insert without spaces
+                variables.insert(label.to_string(), result.clone());
             } else {
-                variables.remove(&label.trim().to_string()); // Remove without spaces
+                variables.remove(&label.to_string());
             }
 
             results.push(result);
@@ -256,7 +255,7 @@ fn run_app(
         if is_locked {
             queue!(buffer, cursor::Hide)?;
         } else {
-            let cursor_position = (output_width + 11 + current_pos) as u16;
+            let cursor_position = (output_width + 9 + current_pos) as u16;
             queue!(
                 buffer,
                 cursor::MoveTo(cursor_position, (current_row + 2) as u16),
@@ -292,9 +291,7 @@ fn run_app(
                                 input.clear();
                             }
                             // 清除对应的变量
-                            for label in (b'A'..=b'L').map(|c|
-                                format!(" {}", c).trim().to_string()
-                            ) {
+                            for label in (b'A'..=b'L').map(|c| (c as char).to_string()) {
                                 variables.remove(&label);
                             }
                             current_pos = 0;
@@ -305,11 +302,9 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            let label = format!(" {}", (b'A' + (current_row as u8)) as char)
-                                .trim()
-                                .to_string();
+                            let label = (b'A' + (current_row as u8)) as char;
                             inputs[current_row].clear();
-                            variables.remove(&label); // 清除对应的变量
+                            variables.remove(&label.to_string()); // 清除对应的变量
                             current_pos = 0;
                         }
                     }
@@ -325,13 +320,11 @@ fn run_app(
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
                         variables.clear(); // 刷新前清除变量
                         for (i, input) in inputs.iter().enumerate() {
-                            let label = format!(" {}", (b'A' + (i as u8)) as char)
-                                .trim()
-                                .to_string();
+                            let label = (b'A' + (i as u8)) as char;
                             if !input.trim().is_empty() {
                                 match evaluate_and_solve(input, &variables) {
                                     Ok(res) => {
-                                        variables.insert(label, res);
+                                        variables.insert(label.to_string(), res);
                                     }
                                     Err(_) => {}
                                 }
@@ -402,8 +395,39 @@ fn run_app(
                     }
                     (KeyCode::Enter, KeyEventKind::Press) => {
                         if !is_locked {
-                            current_row = (current_row + 1) % inputs.len();
-                            current_pos = inputs[current_row].len();
+                            if inputs[current_row] == "about" {
+                                inputs[current_row].clear();
+                                inputs[current_row].push_str("0# RS Mathematical Tools V1.1.0");
+                                current_pos = inputs[current_row].len();
+                            } else if inputs[current_row] == "rate" {
+                                inputs[current_row].clear();
+
+                                let exe_path = env::current_exe().unwrap();
+                                let exe_dir = exe_path.parent().unwrap();
+                                let command_path = if cfg!(target_os = "windows") {
+                                    exe_dir.join("rate.exe")
+                                } else {
+                                    exe_dir.join("./rate")
+                                };
+
+                                let output = std::process::Command::new(command_path).output();
+
+                                match output {
+                                    Ok(output) => {
+                                        let result = String::from_utf8_lossy(&output.stdout);
+                                        inputs[current_row].push_str(&result);
+                                    }
+                                    Err(_) => {
+                                        inputs[current_row].push_str(
+                                            "The rate command was not found!"
+                                        );
+                                    }
+                                }
+                                current_pos = inputs[current_row].len();
+                            } else {
+                                current_row = (current_row + 1) % inputs.len();
+                                current_pos = inputs[current_row].len();
+                            }
                         }
                     }
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
@@ -420,12 +444,12 @@ fn run_app(
                         let clicked_row = (row as usize) - 2;
                         if !is_locked && (2..inputs.len() + 2).contains(&(row as usize)) {
                             current_row = clicked_row;
-                            current_pos = (column as usize) - (output_width + 11);
+                            current_pos = (column as usize) - (output_width + 9);
                             if current_pos > inputs[current_row].len() {
                                 current_pos = inputs[current_row].len();
                             }
                             // 仅在点击时重绘当前行
-                            let label = format!(" {}", (b'A' + (current_row as u8)) as char);
+                            let label = (b'A' + (current_row as u8)) as char;
                             let result = if inputs[current_row].trim().is_empty() {
                                 "".to_string()
                             } else {
@@ -548,20 +572,20 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
         if lhs_replaced.contains('x') || rhs_replaced.contains('x') {
             let x = "x";
 
-            let lhs_value = match eval_str(&lhs_replaced.replace(x, "0")) {
+            let lhs_value = match eval_str(&replace_percentage(&lhs_replaced.replace(x, "0"))) {
                 Ok(val) => val,
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval_str(&rhs_replaced.replace(x, "0")) {
+            let rhs_value = match eval_str(&replace_percentage(&rhs_replaced.replace(x, "0"))) {
                 Ok(val) => val,
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
 
-            let coefficient = match eval_str(&lhs_replaced.replace(x, "1")) {
+            let coefficient = match eval_str(&replace_percentage(&lhs_replaced.replace(x, "1"))) {
                 Ok(val) => val - lhs_value,
                 Err(_) => {
                     return Err("Error".to_string());
@@ -578,13 +602,13 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
             let formatted_result = format_with_thousands_separator(result);
             Ok(formatted_result)
         } else {
-            let lhs_value = match eval_str(&lhs_replaced) {
+            let lhs_value = match eval_str(&replace_percentage(&lhs_replaced)) {
                 Ok(val) => val,
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval_str(&rhs_replaced) {
+            let rhs_value = match eval_str(&replace_percentage(&rhs_replaced)) {
                 Ok(val) => val,
                 Err(_) => {
                     return Err("Error".to_string());
@@ -600,7 +624,7 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
     } else if parts.len() == 1 {
         let expression = replace_variables(parts[0].replace(" ", ""), variables);
 
-        match eval_str(&expression) {
+        match eval_str(&replace_percentage(&expression)) {
             Ok(result) => {
                 let formatted_result = format_with_thousands_separator(result);
                 Ok(formatted_result)
@@ -612,6 +636,12 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
             "Invalid input format. Use a linear equation 'a*x + b = c' or a mathematical expression.".to_string()
         )
     }
+}
+
+/// 替换百分号
+fn replace_percentage(expression: &str) -> String {
+    let re = Regex::new(r"(\d+(\.\d+)?)%").unwrap();
+    re.replace_all(expression, "$1 * 0.01").to_string()
 }
 
 /// 替换变量名为其对应的值
