@@ -2,7 +2,8 @@
 
 >   This is a TUI mathematical tools (calculations) developed using Rust crossterm, which runs perfectly on both Linux and Windows platforms.
 
-![234729](https://github.com/liueff/rs_mathematical_tools/assets/16551523/8ebe653f-0031-4c5f-af4d-d876e7295074)
+![图片](https://github.com/R6LB/rs_mathematical_tools/assets/16551523/4453a36d-a804-41c8-a279-254fa8b187d5)
+
 
 When the program starts, it will by default read the .last.txt file in the current directory. If the file does not exist, the program will create a new one. Starting from line 15, the program will display its contents in the TUI interface. You can also specify a text file to read from the command line.
 
