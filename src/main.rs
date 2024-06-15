@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use regex::Regex;
+use evalexpr::{eval};
 use std::fs::{ self, OpenOptions };
 use std::io::{ self, BufRead, BufReader, Write };
 use std::path::Path;
@@ -33,7 +34,6 @@ use crossterm::{
     },
 };
 use clap::Parser;
-use meval::eval_str;
 use std::env;
 use std::path::PathBuf;
 
@@ -572,21 +572,21 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
         if lhs_replaced.contains('x') || rhs_replaced.contains('x') {
             let x = "x";
 
-            let lhs_value = match eval_str(&replace_percentage(&lhs_replaced.replace(x, "0"))) {
-                Ok(val) => val,
+            let lhs_value = match eval(&replace_percentage(&lhs_replaced.replace(x, "0"))) {
+                Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval_str(&replace_percentage(&rhs_replaced.replace(x, "0"))) {
-                Ok(val) => val,
+            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0"))) {
+                Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
 
-            let coefficient = match eval_str(&replace_percentage(&lhs_replaced.replace(x, "1"))) {
-                Ok(val) => val - lhs_value,
+            let coefficient = match eval(&replace_percentage(&lhs_replaced.replace(x, "1"))) {
+                Ok(val) => val.as_number().unwrap_or(0.0) - lhs_value,
                 Err(_) => {
                     return Err("Error".to_string());
                 }
@@ -602,14 +602,14 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
             let formatted_result = format_with_thousands_separator(result);
             Ok(formatted_result)
         } else {
-            let lhs_value = match eval_str(&replace_percentage(&lhs_replaced)) {
-                Ok(val) => val,
+            let lhs_value = match eval(&replace_percentage(&lhs_replaced)) {
+                Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval_str(&replace_percentage(&rhs_replaced)) {
-                Ok(val) => val,
+            let rhs_value = match eval(&replace_percentage(&rhs_replaced)) {
+                Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
@@ -624,9 +624,9 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
     } else if parts.len() == 1 {
         let expression = replace_variables(parts[0].replace(" ", ""), variables);
 
-        match eval_str(&replace_percentage(&expression)) {
+        match eval(&replace_percentage(&expression)) {
             Ok(result) => {
-                let formatted_result = format_with_thousands_separator(result);
+                let formatted_result = format_with_thousands_separator(result.as_number().unwrap_or(0.0));
                 Ok(formatted_result)
             }
             Err(_) => Err("Invalid mathematical expression.".to_string()),
