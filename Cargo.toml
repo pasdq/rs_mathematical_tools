@@ -1,9 +1,7 @@
 [package]
 name = "rs_mathematical_tools"
-version = "0.1.0"
+version = "1.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 crossterm = "0.27"
@@ -11,9 +9,6 @@ clap = { version = "4.0", features = ["derive"] }
 meval = "0.2.0"
 nalgebra = "0.32.5"
 regex = "1.5"
-
-#[target.x86_64-unknown-linux-musl]
-#linker = "musl-gcc"
 
 [profile.release]
 opt-level = 'z'  # 优化级别为“z”，这是最高级别的优化
