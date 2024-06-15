@@ -226,7 +226,7 @@ fn run_app(
             Print(format!("(A - L) Sum = {}", format_with_thousands_separator(sum))),
             cursor::MoveTo(21, (inputs.len() + 4) as u16),
             Print(format!("Average = {}", format_with_thousands_separator(average))),
-            cursor::MoveTo(0, (inputs.len() + 6) as u16),
+            cursor::MoveTo(0, (inputs.len() + 7) as u16),
             ResetColor,
             Print("[ ----------------------------------------------------------------- ]"),
             cursor::MoveTo(22, 19),
@@ -249,7 +249,7 @@ fn run_app(
         }
 
         for (i, line) in additional_lines.iter().enumerate() {
-            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 7 + i) as u16), Print(line))?;
+            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 8 + i) as u16), Print(line))?;
         }
 
         if is_locked {
