@@ -1,0 +1,16 @@
+[package]
+name = "rate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["blocking", "json","native-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+chrono = "0.4"
+toml = "0.5"
+scraper = "0.13"
+
+[profile.release]
+opt-level = 'z'  # 优化级别为“z”，这是最高级别的优化
+lto = true       # 启用 Link-Time Optimization（LTO）
+codegen-units = 1 # 将编译单元设置为1以减少可执行文件大小
