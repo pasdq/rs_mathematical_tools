@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use regex::Regex;
-use evalexpr::{eval};
+use evalexpr::{ eval };
 use std::fs::{ self, OpenOptions };
 use std::io::{ self, BufRead, BufReader, Write };
 use std::path::Path;
@@ -84,10 +84,19 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 36;
     let output_width = 23;
-    let title = "[ ----------------- RS Mathematical Tools V1.1.0 ------------------ ]";
+    let title = "                    RS Mathematical Tools V1.2.0                     ";
+    let heade = "   [                 Result] = [Mathematical Expression             ]";
     let mut show_saved_message = false;
 
-    queue!(stdout, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
+    queue!(
+        stdout,
+        Clear(ClearType::All),
+        SetAttribute(Attribute::Reverse),
+        cursor::MoveTo(0, 0),
+        Print(title),
+        ResetColor
+    )?;
+    queue!(stdout, SetAttribute(Attribute::Bold), cursor::MoveTo(0, 2), Print(heade), ResetColor)?; // 新插入的行
     stdout.flush()?;
 
     loop {
@@ -114,7 +123,7 @@ fn run_app(
                     queue!(
                         buffer,
                         SetForegroundColor(Color::DarkRed),
-                        cursor::MoveTo(0, (i + 2) as u16),
+                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -131,9 +140,9 @@ fn run_app(
                     if !is_locked {
                         queue!(
                             buffer,
-                            SetForegroundColor(Color::Green), // 修改这里
+                            SetForegroundColor(Color::Green),
                             SetAttribute(Attribute::Underlined),
-                            cursor::MoveTo(0, (i + 2) as u16),
+                            cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
@@ -149,8 +158,8 @@ fn run_app(
                     } else {
                         queue!(
                             buffer,
-                            SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Green }), // M,N 修改这里
-                            cursor::MoveTo(0, (i + 2) as u16),
+                            SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Green }),
+                            cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
@@ -170,7 +179,7 @@ fn run_app(
                     queue!(
                         buffer,
                         SetForegroundColor(Color::DarkRed),
-                        cursor::MoveTo(0, (i + 2) as u16),
+                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -186,8 +195,8 @@ fn run_app(
                 } else {
                     queue!(
                         buffer,
-                        SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Reset }), // M,N 修改这里
-                        cursor::MoveTo(0, (i + 2) as u16),
+                        SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Reset }),
+                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -217,19 +226,21 @@ fn run_app(
 
         queue!(
             buffer,
-            cursor::MoveTo(0, (inputs.len() + 3) as u16),
+            cursor::MoveTo(0, (inputs.len() + 4) as u16), // 行号 +1
             Print(" ".repeat(term_width as usize)),
-            cursor::MoveTo(0, (inputs.len() + 4) as u16),
+            cursor::MoveTo(0, (inputs.len() + 5) as u16), // 行号 +1
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
-            cursor::MoveTo(17, (inputs.len() + 3) as u16),
+            cursor::MoveTo(17, (inputs.len() + 4) as u16), // 行号 +1
             Print(format!("(A - L) Sum = {}", format_with_thousands_separator(sum))),
-            cursor::MoveTo(21, (inputs.len() + 4) as u16),
+            cursor::MoveTo(21, (inputs.len() + 5) as u16), // 行号 +1
             Print(format!("Average = {}", format_with_thousands_separator(average))),
-            cursor::MoveTo(0, (inputs.len() + 7) as u16),
+            cursor::MoveTo(0, (inputs.len() + 8) as u16), // 行号 +1
             ResetColor,
-            Print("[ ----------------------------------------------------------------- ]"),
-            cursor::MoveTo(22, 19),
+            SetAttribute(Attribute::Reverse),
+            Print("                      https://github.com/pasdq                       "),
+            ResetColor,
+            cursor::MoveTo(22, 20), // 行号 +1
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
             Print(format!("Status = {} (F4 Switch)", if is_locked { "Locked" } else { "Opened" })),
             ResetColor
@@ -238,18 +249,18 @@ fn run_app(
         if show_saved_message {
             queue!(
                 buffer,
-                cursor::MoveTo(0, 16),
+                cursor::MoveTo(0, 17), // 行号 +1
                 SetForegroundColor(Color::Yellow),
                 Print("[ --------------------- Recalculate & saved! ---------------------- ]"),
                 ResetColor
             )?;
             show_saved_message = false;
         } else {
-            queue!(buffer, cursor::MoveTo(0, 16), Print(" ".repeat(term_width as usize)))?;
+            queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?; // 行号 +1
         }
 
         for (i, line) in additional_lines.iter().enumerate() {
-            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 8 + i) as u16), Print(line))?;
+            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 9 + i) as u16), Print(line))?; // 行号 +1
         }
 
         if is_locked {
@@ -258,7 +269,7 @@ fn run_app(
             let cursor_position = (output_width + 9 + current_pos) as u16;
             queue!(
                 buffer,
-                cursor::MoveTo(cursor_position, (current_row + 2) as u16),
+                cursor::MoveTo(cursor_position, (current_row + 3) as u16), // 行号 +1
                 cursor::Show
             )?;
         }
@@ -318,6 +329,7 @@ fn run_app(
                         show_saved_message = true; // 设置显示“saved”消息
 
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
+                        queue!(stdout, cursor::MoveTo(0, 2), Print(heade))?; // 新插入的行
                         variables.clear(); // 刷新前清除变量
                         for (i, input) in inputs.iter().enumerate() {
                             let label = (b'A' + (i as u8)) as char;
@@ -441,8 +453,8 @@ fn run_app(
             Event::Mouse(MouseEvent { kind, column, row, .. }) =>
                 match kind {
                     MouseEventKind::Down(MouseButton::Left) => {
-                        let clicked_row = (row as usize) - 2;
-                        if !is_locked && (2..inputs.len() + 2).contains(&(row as usize)) {
+                        let clicked_row = (row as usize) - 3; // 行号偏移增加1
+                        if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
                             current_row = clicked_row;
                             current_pos = (column as usize) - (output_width + 9);
                             if current_pos > inputs[current_row].len() {
@@ -466,7 +478,7 @@ fn run_app(
                             };
                             queue!(
                                 buffer,
-                                cursor::MoveTo(0, (current_row + 2) as u16),
+                                cursor::MoveTo(0, (current_row + 3) as u16), // 行号偏移增加1
                                 Print(
                                     format!(
                                         "{}: [{:>width$}] = [{:<input_width$}]",
@@ -626,7 +638,9 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
 
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
-                let formatted_result = format_with_thousands_separator(result.as_number().unwrap_or(0.0));
+                let formatted_result = format_with_thousands_separator(
+                    result.as_number().unwrap_or(0.0)
+                );
                 Ok(formatted_result)
             }
             Err(_) => Err("Invalid mathematical expression.".to_string()),
