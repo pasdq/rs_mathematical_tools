@@ -34,8 +34,8 @@ It supports cursor movement using the up and down arrow keys and the Tab key, as
 ```
 CTRL+T MOVE TO THE TOP
 CTRL+B MOVE TO THE BOTTOM
-CTRL+A MOVE TO THE HEADER
-CTRL+E MOVE TO THE END
+CTRL+A MOVE TO THE HEAD
+CTRL+E MOVE TO THE TAIL
 
 CTRL+L CLEAR CURRENT
 CTRL+U CLEAR ALL
