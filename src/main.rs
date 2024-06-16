@@ -1,10 +1,11 @@
 use std::collections::HashMap;
-use regex::Regex;
-use evalexpr::{ eval };
 use std::fs::{ self, OpenOptions };
 use std::io::{ self, BufRead, BufReader, Write };
 use std::path::Path;
 use std::sync::{ Arc, Mutex };
+use std::path::PathBuf;
+use regex::Regex;
+use evalexpr::eval;
 use crossterm::{
     cursor,
     event::{
@@ -35,7 +36,7 @@ use crossterm::{
 };
 use clap::Parser;
 use std::env;
-use std::path::PathBuf;
+use toml::Value;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -43,13 +44,91 @@ struct Args {
     filename: Option<String>,
 }
 
-fn main() -> io::Result<()> {
-    let args = Args::parse();
+/// 处理命令以从预定义的函数集合中加载函数定义如果命令匹配一个函数键, 则用相应的函数值更新输入列表
+fn handle_func_command(
+    command: &str,
+    inputs: &mut Vec<String>,
+    func_map: &HashMap<String, HashMap<String, String>>
+) -> bool {
+    if command.starts_with("fc.") {
+        // fc. 是三个字符
+        let key = &command[3..];
+        if let Some(commands) = func_map.get(key) {
+            // 先清除前13个输入区域, 只保留最后一个 N
+            for input in inputs.iter_mut().take(13) {
+                input.clear();
+            }
 
+            for (input_key, input_value) in commands {
+                let index = match input_key.as_str() {
+                    "A" => 0,
+                    "B" => 1,
+                    "C" => 2,
+                    "D" => 3,
+                    "E" => 4,
+                    "F" => 5,
+                    "G" => 6,
+                    "H" => 7,
+                    "I" => 8,
+                    "J" => 9,
+                    "K" => 10,
+                    "L" => 11,
+                    "M" => 12,
+                    "N" => 13,
+                    _ => {
+                        continue;
+                    }
+                };
+                inputs[index] = input_value.to_string();
+            }
+            return true;
+        }
+    }
+    false
+}
+
+/// 从 TOML 文件中加载函数命令, 并将它们解析为嵌套的 HashMap每个函数键映射到另一个包含命令定义的 HashMap
+fn load_func_commands_from_file(
+    filename: &Path
+) -> Result<HashMap<String, HashMap<String, String>>, io::Error> {
+    if !filename.exists() {
+        return Ok(HashMap::new());
+    }
+
+    let content = fs::read_to_string(filename)?;
+    let value: Value = toml::from_str(&content)?;
+    let mut func_map = HashMap::new();
+
+    if let Value::Table(table) = value {
+        for (key, value) in table {
+            if let Value::Table(command_table) = value {
+                let mut commands = HashMap::new();
+                for (command_key, command_value) in command_table {
+                    if let Value::String(command_string) = command_value {
+                        commands.insert(command_key, command_string);
+                    }
+                }
+                func_map.insert(key.to_lowercase(), commands);
+            }
+        }
+    }
+
+    Ok(func_map)
+}
+
+/// 应用程序的主要入口点它从文件中读取函数命令, 解析命令行参数, 初始化输入状态, 并在启用终端设置的情况下运行主要应用循环
+fn main() -> io::Result<()> {
+    // 读取 .func.toml 文件中的命令
     let exe_path = env::current_exe()?;
     let exe_dir = exe_path.parent().unwrap();
+    let func_toml_path = exe_dir.join(".func.toml");
+    let func_map = load_func_commands_from_file(&func_toml_path)?;
+
+    // 解析命令行参数
+    let args = Args::parse();
     let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".last.txt"));
 
+    // 读取输入
     let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| (
         vec!["".to_string(); 14],
         vec![],
@@ -60,7 +139,13 @@ fn main() -> io::Result<()> {
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
-    let result = run_app(&filename, &mut inputs, &additional_lines, Arc::clone(&lock_state));
+    let result = run_app(
+        &filename,
+        &mut inputs,
+        &additional_lines,
+        Arc::clone(&lock_state),
+        &func_map
+    );
 
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -72,20 +157,24 @@ fn main() -> io::Result<()> {
     result
 }
 
+/// 应用程序的核心循环它处理用户输入、更新显示、评估表达式和处理命令同时管理终端显示和交互
 fn run_app(
     filename: &Path,
     inputs: &mut Vec<String>,
     additional_lines: &Vec<String>,
-    lock_state: Arc<Mutex<bool>>
+    lock_state: Arc<Mutex<bool>>,
+    func_map: &HashMap<String, HashMap<String, String>>
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut variables = HashMap::new();
     let mut current_row = 0;
     let mut current_pos = 0;
-    let input_width = 36;
+    let input_width = 47;
     let output_width = 23;
-    let title = "                    RS Mathematical Tools V1.2.0                     ";
-    let heade = "   [                 Result] = [Mathematical Expression             ]";
+    let title = " RS Mathematical Tools                                                   V1.2.1 ";
+    let heade = "                     Result  =  Mathematical Expression";
+    let foote = " Keyword: About | Rate | KK | fc.1-9                   https://github.com/pasdq ";
+    let saved = "[ ---------------------------- Recalculate & saved! -------------------------- ]";
     let mut show_saved_message = false;
 
     queue!(
@@ -96,7 +185,14 @@ fn run_app(
         Print(title),
         ResetColor
     )?;
-    queue!(stdout, SetAttribute(Attribute::Bold), cursor::MoveTo(0, 2), Print(heade), ResetColor)?; // 新插入的行
+    queue!(
+        stdout,
+        SetAttribute(Attribute::Bold),
+        SetForegroundColor(Color::Blue),
+        cursor::MoveTo(0, 2),
+        Print(heade),
+        ResetColor
+    )?; // 新插入的行
     stdout.flush()?;
 
     loop {
@@ -114,21 +210,37 @@ fn run_app(
                     Ok(res) => {
                         if res.len() <= output_width - 3 { res } else { "Error".to_string() }
                     }
-                    Err(_) => "Error".to_string(),
+                    Err(_) => {
+                        if input.starts_with("fc.") {
+                            "Import from cfg file".to_string() // 不显示 "Error"
+                        } else {
+                            "Error".to_string()
+                        }
+                    }
                 }
             };
 
             if i == current_row {
-                if result == "Error" {
+                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(Color::DarkRed),
+                        SetForegroundColor(
+                            if input.starts_with("fc.") {
+                                Color::Blue
+                            } else {
+                                Color::DarkRed
+                            }
+                        ),
                         cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
                                 label,
-                                result,
+                                if input.starts_with("fc.") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
                                 input,
                                 width = output_width,
                                 input_width = input_width
@@ -175,16 +287,26 @@ fn run_app(
                     }
                 }
             } else {
-                if result == "Error" {
+                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(Color::DarkRed),
+                        SetForegroundColor(
+                            if input.starts_with("fc.") {
+                                Color::Blue
+                            } else {
+                                Color::DarkRed
+                            }
+                        ),
                         cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
                                 label,
-                                result,
+                                if input.starts_with("fc.") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
                                 input,
                                 width = output_width,
                                 input_width = input_width
@@ -238,11 +360,17 @@ fn run_app(
             cursor::MoveTo(0, (inputs.len() + 8) as u16), // 行号 +1
             ResetColor,
             SetAttribute(Attribute::Reverse),
-            Print("                      https://github.com/pasdq                       "),
+            Print(foote),
             ResetColor,
             cursor::MoveTo(22, 20), // 行号 +1
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
-            Print(format!("Status = {} (F4 Switch)", if is_locked { "Locked" } else { "Opened" })),
+            Print(
+                format!("Status = {} (F4 Status Switch)", if is_locked {
+                    "Locked"
+                } else {
+                    "Opened"
+                })
+            ),
             ResetColor
         )?;
 
@@ -250,8 +378,8 @@ fn run_app(
             queue!(
                 buffer,
                 cursor::MoveTo(0, 17), // 行号 +1
-                SetForegroundColor(Color::Yellow),
-                Print("[ --------------------- Recalculate & saved! ---------------------- ]"),
+                SetForegroundColor(Color::DarkYellow),
+                Print(saved),
                 ResetColor
             )?;
             show_saved_message = false;
@@ -297,8 +425,8 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            // 仅清空前面12个输入区域
-                            for input in inputs.iter_mut().take(12) {
+                            // 仅清空前面13个输入区域, 保留最后一个 N
+                            for input in inputs.iter_mut().take(13) {
                                 input.clear();
                             }
                             // 清除对应的变量
@@ -329,7 +457,14 @@ fn run_app(
                         show_saved_message = true; // 设置显示“saved”消息
 
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
-                        queue!(stdout, cursor::MoveTo(0, 2), Print(heade))?; // 新插入的行
+                        queue!(
+                            stdout,
+                            SetAttribute(Attribute::Bold),
+                            SetForegroundColor(Color::Blue),
+                            cursor::MoveTo(0, 2),
+                            Print(heade),
+                            ResetColor
+                        )?; // 新插入的行
                         variables.clear(); // 刷新前清除变量
                         for (i, input) in inputs.iter().enumerate() {
                             let label = (b'A' + (i as u8)) as char;
@@ -407,11 +542,18 @@ fn run_app(
                     }
                     (KeyCode::Enter, KeyEventKind::Press) => {
                         if !is_locked {
-                            if inputs[current_row] == "about" {
-                                inputs[current_row].clear();
-                                inputs[current_row].push_str("0# RS Mathematical Tools V1.1.0");
+                            let input_command = inputs[current_row].clone().to_lowercase();
+                            if handle_func_command(&input_command, inputs, func_map) {
                                 current_pos = inputs[current_row].len();
-                            } else if inputs[current_row] == "rate" {
+                            } else if input_command == "about" {
+                                inputs[current_row].clear();
+                                inputs[current_row].push_str("# RS Mathematical Tools V1.1.0");
+                                current_pos = inputs[current_row].len();
+                            } else if input_command == "kk" {
+                                inputs[current_row].clear();
+                                inputs[current_row].push_str("1000.0 # Thousand");
+                                current_pos = inputs[current_row].len();
+                            } else if input_command == "rate" {
                                 inputs[current_row].clear();
 
                                 let exe_path = env::current_exe().unwrap();
@@ -427,7 +569,8 @@ fn run_app(
                                 match output {
                                     Ok(output) => {
                                         let result = String::from_utf8_lossy(&output.stdout);
-                                        inputs[current_row].push_str(&result);
+                                        let trimmed_result = result.trim(); // 移除前后的空白和换行符
+                                        inputs[current_row].push_str(trimmed_result);
                                     }
                                     Err(_) => {
                                         inputs[current_row].push_str(
@@ -519,7 +662,7 @@ fn run_app(
     Ok(())
 }
 
-/// 从文件中读取输入数据
+/// 从指定文件读取输入数据如果文件不存在或为空, 则初始化输入列表和附加行
 fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), io::Error> {
     if !filename.exists() || fs::metadata(filename)?.len() == 0 {
         fs::File::create(filename)?;
@@ -545,7 +688,7 @@ fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), 
     Ok((inputs, additional_lines))
 }
 
-/// 保存输入数据到文件
+/// 将当前输入数据和附加行的状态保存到指定文件
 fn save_inputs_to_file(
     filename: &Path,
     inputs: &[String],
@@ -565,8 +708,12 @@ fn save_inputs_to_file(
     Ok(())
 }
 
-/// 评估和求解输入
+/// 评估和求解输入中提供的数学表达式或方程支持线性方程和带变量替换的一般表达式
 fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Result<String, String> {
+    if input.starts_with("fc.") {
+        return Ok("Import from cfg file".to_string());
+    }
+
     let input_without_comment = match input.find('#') {
         Some(pos) => &input[..pos],
         None => input,
@@ -581,23 +728,26 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
         let lhs_replaced = replace_variables(lhs, variables);
         let rhs_replaced = replace_variables(rhs, variables);
 
+        let lhs_replaced = lhs_replaced.replace("/", "*1.0/");
+        let rhs_replaced = rhs_replaced.replace("/", "*1.0/");
+
         if lhs_replaced.contains('x') || rhs_replaced.contains('x') {
             let x = "x";
 
-            let lhs_value = match eval(&replace_percentage(&lhs_replaced.replace(x, "0"))) {
+            let lhs_value = match eval(&replace_percentage(&lhs_replaced.replace(x, "0.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0"))) {
+            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
 
-            let coefficient = match eval(&replace_percentage(&lhs_replaced.replace(x, "1"))) {
+            let coefficient = match eval(&replace_percentage(&lhs_replaced.replace(x, "1.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0) - lhs_value,
                 Err(_) => {
                     return Err("Error".to_string());
@@ -636,6 +786,8 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
     } else if parts.len() == 1 {
         let expression = replace_variables(parts[0].replace(" ", ""), variables);
 
+        let expression = expression.replace("/", "*1.0/");
+
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
                 let formatted_result = format_with_thousands_separator(
@@ -652,13 +804,13 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
     }
 }
 
-/// 替换百分号
+/// 将数学表达式中的百分比（例如 `50%`）替换为其小数等价物（例如 `0.5`）
 fn replace_percentage(expression: &str) -> String {
     let re = Regex::new(r"(\d+(\.\d+)?)%").unwrap();
     re.replace_all(expression, "$1 * 0.01").to_string()
 }
 
-/// 替换变量名为其对应的值
+/// 将数学表达式中的变量名替换为给定变量映射中的相应值
 fn replace_variables(expression: String, variables: &HashMap<String, String>) -> String {
     let mut replaced_expression = expression.to_lowercase();
     let current_row = (b'A' + (variables.len() as u8)) as char;
@@ -678,7 +830,7 @@ fn replace_variables(expression: String, variables: &HashMap<String, String>) ->
     replaced_expression
 }
 
-/// 计算结果的总和和有效数量
+/// 计算结果列表中有效数值结果的总和和数量最多处理前 12 个结果
 fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     let mut sum = 0.0;
     let mut count = 0;
@@ -695,7 +847,7 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     (sum, count)
 }
 
-/// 格式化数字，添加千位分隔符
+/// 格式化数值, 在数值中添加千位分隔符以提高可读性
 fn format_with_thousands_separator(value: f64) -> String {
     let formatted_value = format!("{:.3}", value);
     let parts: Vec<&str> = formatted_value.split('.').collect();
@@ -721,7 +873,7 @@ fn format_with_thousands_separator(value: f64) -> String {
     }
 }
 
-/// 移除千位分隔符
+/// 移除格式化数值中的千位分隔符以便进一步处理
 fn remove_thousands_separator(value: &str) -> String {
     value.replace(",", "")
 }
