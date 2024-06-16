@@ -3,7 +3,7 @@
 > [!TIP]
 > This is a mathematical tool (calculator) developed using Rust, featuring a clean and clear TUI interface that runs perfectly on both Linux and Windows platforms.
 
-![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/f0775180-4f41-4314-aebd-aef63bc0330e)
+![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/04e0491e-f02a-4ba7-9f44-79985c50cf3c)
 
 When the program starts, it will by default read the .last.txt file in the current directory. If the file does not exist, the program will create a new one. Starting from line 15, the program will display its contents in the TUI interface.
 
