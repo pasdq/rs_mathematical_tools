@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fs::{ self, OpenOptions };
-use std::io::{ self, BufRead, BufReader, Write };
+use std::fs::{self};
+use std::io::{self, Write};
 use std::path::Path;
-use std::sync::{ Arc, Mutex };
+use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use regex::Regex;
 use evalexpr::eval;
@@ -23,7 +23,7 @@ use crossterm::{
     },
     execute,
     queue,
-    style::{ Attribute, SetAttribute, Color, Print, SetForegroundColor, ResetColor },
+    style::{Attribute, SetAttribute, Color, Print, SetForegroundColor, ResetColor},
     terminal::{
         disable_raw_mode,
         enable_raw_mode,
@@ -44,21 +44,19 @@ struct Args {
     filename: Option<String>,
 }
 
-/// 处理命令以从预定义的函数集合中加载函数定义如果命令匹配一个函数键, 则用相应的函数值更新输入列表
 fn handle_func_command(
     command: &str,
     inputs: &mut Vec<String>,
-    func_map: &HashMap<String, HashMap<String, String>>
+    func_map: &HashMap<String, HashMap<String, String>>,
+    const_map: &HashMap<String, String>,
+    current_row: usize
 ) -> bool {
     if command.starts_with("fc.") {
-        // fc. 是三个字符
         let key = &command[3..];
         if let Some(commands) = func_map.get(key) {
-            // 先清除前13个输入区域, 只保留最后一个 N
             for input in inputs.iter_mut().take(13) {
                 input.clear();
             }
-
             for (input_key, input_value) in commands {
                 let index = match input_key.as_str() {
                     "A" => 0,
@@ -83,25 +81,100 @@ fn handle_func_command(
             }
             return true;
         }
+    } else if command.starts_with("cst.") {
+        let key = &command[4..];
+        if let Some(value) = const_map.get(key) {
+            inputs[current_row] = value.to_string();
+            return true;
+        }
     }
     false
 }
 
-/// 从 TOML 文件中加载函数命令, 并将它们解析为嵌套的 HashMap每个函数键映射到另一个包含命令定义的 HashMap
 fn load_func_commands_from_file(
     filename: &Path
-) -> Result<HashMap<String, HashMap<String, String>>, io::Error> {
+) -> Result<(HashMap<String, HashMap<String, String>>, HashMap<String, String>, Option<String>, Option<String>), io::Error> {
     if !filename.exists() {
-        return Ok(HashMap::new());
+        let initial_content =
+            r#"
+[0]
+A = ""
+B = ""
+C = ""
+D = ""
+E = ""
+F = ""
+G = ""
+H = ""
+I = ""
+J = ""
+K = ""
+L = ""
+M = ""
+N = ""
+
+[remarks]
+R0 = ""
+
+[const]
+k = "1000.0 # Thousand"
+
+[TUI]
+color = "Green"
+attribute = "Underlined"
+"#;
+        fs::write(filename, initial_content)?;
     }
 
-    let content = fs::read_to_string(filename)?;
-    let value: Value = toml::from_str(&content)?;
+    let mut content = fs::read_to_string(filename)?;
+    let mut value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+    if let Value::Table(ref mut table) = value {
+        if !table.contains_key("0") {
+            let mut initial_0_section = toml::map::Map::new();
+            initial_0_section.insert("A".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("B".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("C".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("D".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("E".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("F".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("G".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("H".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("I".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("J".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("K".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("L".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("M".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("N".to_string(), Value::String("".to_string()));
+
+            table.insert("0".to_string(), Value::Table(initial_0_section));
+            content = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            fs::write(filename, content.clone())?;
+        }
+    }
+
+    let value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let mut func_map = HashMap::new();
+    let mut const_map = HashMap::new();
+    let mut custom_color = None;
+    let mut custom_attribute = None;
 
     if let Value::Table(table) = value {
         for (key, value) in table {
-            if let Value::Table(command_table) = value {
+            if key == "const" {
+                if let Value::Table(const_table) = value {
+                    for (const_key, const_value) in const_table {
+                        if let Value::String(const_string) = const_value {
+                            const_map.insert(const_key, const_string);
+                        }
+                    }
+                }
+            } else if key == "TUI" {
+                if let Value::Table(tui_table) = value {
+                    custom_color = tui_table.get("color").and_then(|v| v.as_str().map(String::from));
+                    custom_attribute = tui_table.get("attribute").and_then(|v| v.as_str().map(String::from));
+                }
+            } else if let Value::Table(command_table) = value {
                 let mut commands = HashMap::new();
                 for (command_key, command_value) in command_table {
                     if let Value::String(command_string) = command_value {
@@ -113,57 +186,50 @@ fn load_func_commands_from_file(
         }
     }
 
-    Ok(func_map)
+    Ok((func_map, const_map, custom_color, custom_attribute))
 }
 
-/// 应用程序的主要入口点它从文件中读取函数命令, 解析命令行参数, 初始化输入状态, 并在启用终端设置的情况下运行主要应用循环
 fn main() -> io::Result<()> {
-    // 读取 .func.toml 文件中的命令
     let exe_path = env::current_exe()?;
     let exe_dir = exe_path.parent().unwrap();
     let func_toml_path = exe_dir.join(".func.toml");
-    let func_map = load_func_commands_from_file(&func_toml_path)?;
-
-    // 解析命令行参数
+    let (func_map, const_map, custom_color, custom_attribute) = load_func_commands_from_file(&func_toml_path)?;
     let args = Args::parse();
-    let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".last.txt"));
-
-    // 读取输入
+    let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
     let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| (
         vec!["".to_string(); 14],
         vec![],
     ));
-
     let lock_state = Arc::new(Mutex::new(false));
-
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
-
     let result = run_app(
         &filename,
         &mut inputs,
         &additional_lines,
         Arc::clone(&lock_state),
-        &func_map
+        &func_map,
+        &const_map,
+        custom_color,
+        custom_attribute,
     );
-
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
-
     if let Err(e) = save_inputs_to_file(&filename, &inputs, &additional_lines) {
         eprintln!("Error saving inputs to file: {}", e);
     }
-
     result
 }
 
-/// 应用程序的核心循环它处理用户输入、更新显示、评估表达式和处理命令同时管理终端显示和交互
 fn run_app(
     filename: &Path,
     inputs: &mut Vec<String>,
     additional_lines: &Vec<String>,
     lock_state: Arc<Mutex<bool>>,
-    func_map: &HashMap<String, HashMap<String, String>>
+    func_map: &HashMap<String, HashMap<String, String>>,
+    const_map: &HashMap<String, String>,
+    custom_color: Option<String>,
+    custom_attribute: Option<String>
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut variables = HashMap::new();
@@ -171,11 +237,54 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 47;
     let output_width = 23;
-    let title = " RS Mathematical Tools                                                   V1.2.1 ";
-    let heade = "                     Result  =  Mathematical Expression";
-    let foote = " Keyword: About | Rate | KK | fc.1-9                   https://github.com/pasdq ";
+    let title = " RS Mathematical Tools                                                   V1.2.4 ";
+    let heade = "                     Result  =  Mathematical Expression                         ";
+    let foote = " About | Rate | fc.1-9 | cst.a-z                       https://github.com/pasdq ";
     let saved = "[ ---------------------------- Recalculate & saved! -------------------------- ]";
     let mut show_saved_message = false;
+    let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
+    let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
+
+let tui_color = match default_color.as_str() {
+    "Blue" => Color::Blue,
+    "Red" => Color::Red,
+    "Green" => Color::Green,
+    "Yellow" => Color::Yellow,
+    "Magenta" => Color::Magenta,
+    "Cyan" => Color::Cyan,
+    "White" => Color::White,
+    "Black" => Color::Black,
+    "DarkRed" => Color::DarkRed,
+    "DarkGreen" => Color::DarkGreen,
+    "DarkYellow" => Color::DarkYellow,
+    "DarkBlue" => Color::DarkBlue,
+    "DarkMagenta" => Color::DarkMagenta,
+    "DarkCyan" => Color::DarkCyan,
+    "Grey" => Color::Grey,
+    "DarkGrey" => Color::DarkGrey,
+    _ => Color::Green, // Fallback color
+};
+
+let tui_attribute = match default_attribute.as_str() {
+    "Bold" => Attribute::Bold,
+    "Underlined" => Attribute::Underlined,
+    "Reverse" => Attribute::Reverse,
+    "NoBold" => Attribute::NoBold,
+    "NoUnderline" => Attribute::NoUnderline,
+    "NoReverse" => Attribute::NoReverse,
+    "Italic" => Attribute::Italic,
+    "NoItalic" => Attribute::NoItalic,
+    "Dim" => Attribute::Dim,
+    "NormalIntensity" => Attribute::NormalIntensity,
+    "SlowBlink" => Attribute::SlowBlink,
+    "RapidBlink" => Attribute::RapidBlink,
+    "NoBlink" => Attribute::NoBlink,
+    "Hidden" => Attribute::Hidden,
+    "NoHidden" => Attribute::NoHidden,
+    "CrossedOut" => Attribute::CrossedOut,
+    "NotCrossedOut" => Attribute::NotCrossedOut,
+    _ => Attribute::Underlined, // Fallback attribute
+};
 
     queue!(
         stdout,
@@ -192,15 +301,13 @@ fn run_app(
         cursor::MoveTo(0, 2),
         Print(heade),
         ResetColor
-    )?; // 新插入的行
+    )?;
     stdout.flush()?;
-
     loop {
         let is_locked = *lock_state.lock().unwrap();
         let (term_width, _) = size()?;
         let mut results = Vec::new();
         let mut buffer = Vec::new();
-
         for (i, input) in inputs.iter().enumerate() {
             let label = (b'A' + (i as u8)) as char;
             let result = if input.trim().is_empty() {
@@ -212,14 +319,13 @@ fn run_app(
                     }
                     Err(_) => {
                         if input.starts_with("fc.") {
-                            "Import from cfg file".to_string() // 不显示 "Error"
+                            "Import from cfg file".to_string()
                         } else {
                             "Error".to_string()
                         }
                     }
                 }
             };
-
             if i == current_row {
                 if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
                     queue!(
@@ -231,7 +337,7 @@ fn run_app(
                                 Color::DarkRed
                             }
                         ),
-                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
+                        cursor::MoveTo(0, (i + 3) as u16),
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -252,9 +358,9 @@ fn run_app(
                     if !is_locked {
                         queue!(
                             buffer,
-                            SetForegroundColor(Color::Green),
-                            SetAttribute(Attribute::Underlined),
-                            cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
+                            SetForegroundColor(tui_color),
+                            SetAttribute(tui_attribute),
+                            cursor::MoveTo(0, (i + 3) as u16),
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
@@ -270,8 +376,8 @@ fn run_app(
                     } else {
                         queue!(
                             buffer,
-                            SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Green }),
-                            cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
+                            SetForegroundColor(if i >= 12 { Color::Blue } else { tui_color }),
+                            cursor::MoveTo(0, (i + 3) as u16),
                             Print(
                                 format!(
                                     "{}: [{:>width$}] = [{:<input_width$}]",
@@ -297,7 +403,7 @@ fn run_app(
                                 Color::DarkRed
                             }
                         ),
-                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
+                        cursor::MoveTo(0, (i + 3) as u16),
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -318,7 +424,7 @@ fn run_app(
                     queue!(
                         buffer,
                         SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Reset }),
-                        cursor::MoveTo(0, (i + 3) as u16), // 行号 +1
+                        cursor::MoveTo(0, (i + 3) as u16),
                         Print(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
@@ -333,37 +439,33 @@ fn run_app(
                     )?;
                 }
             }
-
             if result != "Error" {
                 variables.insert(label.to_string(), result.clone());
             } else {
                 variables.remove(&label.to_string());
             }
-
             results.push(result);
         }
-
         let (sum, valid_count) = calculate_sum_and_count(&results);
         let average = if valid_count > 0 { sum / (valid_count as f64) } else { 0.0 };
-
         queue!(
             buffer,
-            cursor::MoveTo(0, (inputs.len() + 4) as u16), // 行号 +1
+            cursor::MoveTo(0, (inputs.len() + 4) as u16),
             Print(" ".repeat(term_width as usize)),
-            cursor::MoveTo(0, (inputs.len() + 5) as u16), // 行号 +1
+            cursor::MoveTo(0, (inputs.len() + 5) as u16),
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
-            cursor::MoveTo(17, (inputs.len() + 4) as u16), // 行号 +1
+            cursor::MoveTo(17, (inputs.len() + 4) as u16),
             Print(format!("(A - L) Sum = {}", format_with_thousands_separator(sum))),
-            cursor::MoveTo(21, (inputs.len() + 5) as u16), // 行号 +1
+            cursor::MoveTo(21, (inputs.len() + 5) as u16),
             Print(format!("Average = {}", format_with_thousands_separator(average))),
-            cursor::MoveTo(0, (inputs.len() + 8) as u16), // 行号 +1
+            cursor::MoveTo(0, (inputs.len() + 8) as u16),
             ResetColor,
             SetAttribute(Attribute::Reverse),
             Print(foote),
             ResetColor,
-            cursor::MoveTo(22, 20), // 行号 +1
-            SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
+            cursor::MoveTo(22, 20),
+            SetForegroundColor(if is_locked { Color::Red } else { tui_color }),
             Print(
                 format!("Status = {} (F4 Status Switch)", if is_locked {
                     "Locked"
@@ -373,37 +475,33 @@ fn run_app(
             ),
             ResetColor
         )?;
-
         if show_saved_message {
             queue!(
                 buffer,
-                cursor::MoveTo(0, 17), // 行号 +1
+                cursor::MoveTo(0, 17),
                 SetForegroundColor(Color::DarkYellow),
                 Print(saved),
                 ResetColor
             )?;
             show_saved_message = false;
         } else {
-            queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?; // 行号 +1
+            queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?;
         }
-
         for (i, line) in additional_lines.iter().enumerate() {
-            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 9 + i) as u16), Print(line))?; // 行号 +1
+            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 9 + i) as u16), Print(line))?;
         }
-
         if is_locked {
             queue!(buffer, cursor::Hide)?;
         } else {
             let cursor_position = (output_width + 9 + current_pos) as u16;
             queue!(
                 buffer,
-                cursor::MoveTo(cursor_position, (current_row + 3) as u16), // 行号 +1
+                cursor::MoveTo(cursor_position, (current_row + 3) as u16),
                 cursor::Show
             )?;
         }
         stdout.write_all(&buffer)?;
         stdout.flush()?;
-
         match event::read()? {
             Event::Key(KeyEvent { code, modifiers, kind, .. }) =>
                 match (code, kind) {
@@ -425,11 +523,9 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            // 仅清空前面13个输入区域, 保留最后一个 N
                             for input in inputs.iter_mut().take(13) {
                                 input.clear();
                             }
-                            // 清除对应的变量
                             for label in (b'A'..=b'L').map(|c| (c as char).to_string()) {
                                 variables.remove(&label);
                             }
@@ -443,7 +539,7 @@ fn run_app(
                         if !is_locked {
                             let label = (b'A' + (current_row as u8)) as char;
                             inputs[current_row].clear();
-                            variables.remove(&label.to_string()); // 清除对应的变量
+                            variables.remove(&label.to_string());
                             current_pos = 0;
                         }
                     }
@@ -451,11 +547,8 @@ fn run_app(
                         (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) ||
                         (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press)
                     => {
-                        // 保存当前输入内容到 .last.txt
                         save_inputs_to_file(filename, inputs, additional_lines)?;
-
-                        show_saved_message = true; // 设置显示“saved”消息
-
+                        show_saved_message = true;
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
                         queue!(
                             stdout,
@@ -464,8 +557,8 @@ fn run_app(
                             cursor::MoveTo(0, 2),
                             Print(heade),
                             ResetColor
-                        )?; // 新插入的行
-                        variables.clear(); // 刷新前清除变量
+                        )?;
+                        variables.clear();
                         for (i, input) in inputs.iter().enumerate() {
                             let label = (b'A' + (i as u8)) as char;
                             if !input.trim().is_empty() {
@@ -540,22 +633,23 @@ fn run_app(
                             current_pos -= 1;
                         }
                     }
-                    (KeyCode::Enter, KeyEventKind::Press) => {
+                                        (KeyCode::Enter, KeyEventKind::Press) => {
                         if !is_locked {
                             let input_command = inputs[current_row].clone().to_lowercase();
-                            if handle_func_command(&input_command, inputs, func_map) {
+                            if handle_func_command(
+                                &input_command,
+                                inputs,
+                                func_map,
+                                const_map,
+                                current_row
+                            ) {
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "about" {
                                 inputs[current_row].clear();
-                                inputs[current_row].push_str("# RS Mathematical Tools V1.1.0");
-                                current_pos = inputs[current_row].len();
-                            } else if input_command == "kk" {
-                                inputs[current_row].clear();
-                                inputs[current_row].push_str("1000.0 # Thousand");
+                                inputs[current_row].push_str("# RS Mathematical Tools V1.2.4");
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "rate" {
                                 inputs[current_row].clear();
-
                                 let exe_path = env::current_exe().unwrap();
                                 let exe_dir = exe_path.parent().unwrap();
                                 let command_path = if cfg!(target_os = "windows") {
@@ -563,13 +657,11 @@ fn run_app(
                                 } else {
                                     exe_dir.join("./rate")
                                 };
-
                                 let output = std::process::Command::new(command_path).output();
-
                                 match output {
                                     Ok(output) => {
                                         let result = String::from_utf8_lossy(&output.stdout);
-                                        let trimmed_result = result.trim(); // 移除前后的空白和换行符
+                                        let trimmed_result = result.trim();
                                         inputs[current_row].push_str(trimmed_result);
                                     }
                                     Err(_) => {
@@ -596,14 +688,13 @@ fn run_app(
             Event::Mouse(MouseEvent { kind, column, row, .. }) =>
                 match kind {
                     MouseEventKind::Down(MouseButton::Left) => {
-                        let clicked_row = (row as usize) - 3; // 行号偏移增加1
+                        let clicked_row = (row as usize) - 3;
                         if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
                             current_row = clicked_row;
                             current_pos = (column as usize) - (output_width + 9);
                             if current_pos > inputs[current_row].len() {
                                 current_pos = inputs[current_row].len();
                             }
-                            // 仅在点击时重绘当前行
                             let label = (b'A' + (current_row as u8)) as char;
                             let result = if inputs[current_row].trim().is_empty() {
                                 "".to_string()
@@ -621,7 +712,7 @@ fn run_app(
                             };
                             queue!(
                                 buffer,
-                                cursor::MoveTo(0, (current_row + 3) as u16), // 行号偏移增加1
+                                cursor::MoveTo(0, (current_row + 3) as u16),
                                 Print(
                                     format!(
                                         "{}: [{:>width$}] = [{:<input_width$}]",
@@ -658,109 +749,187 @@ fn run_app(
             _ => {}
         }
     }
-
     Ok(())
 }
 
-/// 从指定文件读取输入数据如果文件不存在或为空, 则初始化输入列表和附加行
+/// 从指定文件读取输入数据
+/// 如果文件不存在或为空, 则初始化输入列表和附加行
 fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), io::Error> {
     if !filename.exists() || fs::metadata(filename)?.len() == 0 {
-        fs::File::create(filename)?;
+        let initial_content =
+            r#"
+[0]
+A = ""
+B = ""
+C = ""
+D = ""
+E = ""
+F = ""
+G = ""
+H = ""
+I = ""
+J = ""
+K = ""
+L = ""
+M = ""
+N = ""
+
+[remarks]
+R0 = ""
+"#;
+        fs::write(filename, initial_content)?;
         return Ok((vec!["".to_string(); 14], vec![]));
     }
+    
+    let mut content = fs::read_to_string(filename)?;
+    let mut value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    let file = fs::File::open(filename)?;
-    let reader = BufReader::new(file);
-    let mut lines = reader.lines();
+    if let Value::Table(ref mut table) = value {
+        if !table.contains_key("0") {
+            let mut initial_0_section = toml::map::Map::new();
+            initial_0_section.insert("A".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("B".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("C".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("D".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("E".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("F".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("G".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("H".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("I".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("J".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("K".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("L".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("M".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("N".to_string(), Value::String("".to_string()));
 
+            table.insert("0".to_string(), Value::Table(initial_0_section));
+            content = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            fs::write(filename, content.clone())?;
+        }
+    }
+
+    let value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let mut inputs = vec!["".to_string(); 14];
-    for i in 0..14 {
-        if let Some(Ok(line)) = lines.next() {
-            if let Some(pos) = line.find('=') {
-                inputs[i] = line[pos + 1..].to_string();
-            } else {
-                inputs[i] = line;
+    let mut additional_lines = vec![];
+
+    if let Value::Table(table) = value {
+        if let Some(Value::Table(input_table)) = table.get("0") {
+            for (key, value) in input_table {
+                if let Value::String(input_string) = value {
+                    let index = match key.as_str() {
+                        "A" => 0,
+                        "B" => 1,
+                        "C" => 2,
+                        "D" => 3,
+                        "E" => 4,
+                        "F" => 5,
+                        "G" => 6,
+                        "H" => 7,
+                        "I" => 8,
+                        "J" => 9,
+                        "K" => 10,
+                        "L" => 11,
+                        "M" => 12,
+                        "N" => 13,
+                        _ => {
+                            continue;
+                        }
+                    };
+                    inputs[index] = input_string.clone();
+                }
+            }
+        }
+        if let Some(Value::Table(remarks_table)) = table.get("remarks") {
+            for (_key, value) in remarks_table {
+                if let Value::String(remark_string) = value {
+                    additional_lines.push(remark_string.clone());
+                }
             }
         }
     }
 
-    let additional_lines: Vec<String> = lines.filter_map(Result::ok).collect();
     Ok((inputs, additional_lines))
 }
 
 /// 将当前输入数据和附加行的状态保存到指定文件
+/// 将当前输入数据的状态保存到指定文件（不包括附加行）
 fn save_inputs_to_file(
     filename: &Path,
     inputs: &[String],
-    additional_lines: &[String]
+    _additional_lines: &[String]
 ) -> Result<(), io::Error> {
-    let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(filename)?;
+    let mut value = if filename.exists() {
+        let content = fs::read_to_string(filename)?;
+        toml::from_str(&content).unwrap_or(Value::Table(toml::map::Map::new()))
+    } else {
+        Value::Table(toml::map::Map::new())
+    };
 
-    for (i, input) in inputs.iter().enumerate() {
-        let label = (b'A' + (i as u8)) as char;
-        writeln!(file, "{}={}", label, input)?;
+    if let Value::Table(ref mut table) = value {
+        // Preserve other sections and items in the table
+        let mut input_table = table.get("0").cloned().unwrap_or(Value::Table(toml::map::Map::new()));
+        if let Value::Table(ref mut input_table) = input_table {
+            for (i, input) in inputs.iter().enumerate() {
+                let label = (b'A' + (i as u8)) as char;
+                if !input.is_empty() {
+                    input_table.insert(label.to_string(), Value::String(input.clone()));
+                } else {
+                    input_table.remove(&label.to_string());
+                }
+            }
+        }
+        table.insert("0".to_string(), input_table);
     }
 
-    for line in additional_lines {
-        writeln!(file, "{}", line)?;
-    }
-
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    fs::write(filename, toml_string)?;
     Ok(())
 }
 
-/// 评估和求解输入中提供的数学表达式或方程支持线性方程和带变量替换的一般表达式
+/// 评估和求解输入中提供的数学表达式或方程
+/// 支持线性方程和带变量替换的一般表达式
 fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Result<String, String> {
     if input.starts_with("fc.") {
         return Ok("Import from cfg file".to_string());
     }
-
     let input_without_comment = match input.find('#') {
         Some(pos) => &input[..pos],
         None => input,
     };
-
     let parts: Vec<&str> = input_without_comment.split('=').collect();
-
     if parts.len() == 2 {
         let lhs = parts[0].replace(" ", "").replace("X", "x");
         let rhs = parts[1].replace(" ", "").replace("X", "x");
-
         let lhs_replaced = replace_variables(lhs, variables);
         let rhs_replaced = replace_variables(rhs, variables);
-
         let lhs_replaced = lhs_replaced.replace("/", "*1.0/");
         let rhs_replaced = rhs_replaced.replace("/", "*1.0/");
-
         if lhs_replaced.contains('x') || rhs_replaced.contains('x') {
             let x = "x";
-
             let lhs_value = match eval(&replace_percentage(&lhs_replaced.replace(x, "0.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
+            let _rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-
             let coefficient = match eval(&replace_percentage(&lhs_replaced.replace(x, "1.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0) - lhs_value,
                 Err(_) => {
                     return Err("Error".to_string());
                 }
             };
-
             if coefficient == 0.0 {
                 return Err(
                     "Invalid equation: coefficient of x is zero or not a linear equation".to_string()
                 );
             }
-
-            let result = (rhs_value - lhs_value) / coefficient;
+            let result = (_rhs_value - lhs_value) / coefficient;
             let formatted_result = format_with_thousands_separator(result);
             Ok(formatted_result)
         } else {
@@ -776,7 +945,6 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
                     return Err("Error".to_string());
                 }
             };
-
             if lhs_value == rhs_value {
                 Ok(format_with_thousands_separator(lhs_value))
             } else {
@@ -785,9 +953,7 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
         }
     } else if parts.len() == 1 {
         let expression = replace_variables(parts[0].replace(" ", ""), variables);
-
         let expression = expression.replace("/", "*1.0/");
-
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
                 let formatted_result = format_with_thousands_separator(
@@ -830,7 +996,8 @@ fn replace_variables(expression: String, variables: &HashMap<String, String>) ->
     replaced_expression
 }
 
-/// 计算结果列表中有效数值结果的总和和数量最多处理前 12 个结果
+/// 计算结果列表中有效数值结果的总和和数量
+/// 最多处理前 12 个结果
 fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     let mut sum = 0.0;
     let mut count = 0;
