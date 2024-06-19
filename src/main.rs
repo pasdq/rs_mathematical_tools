@@ -126,34 +126,10 @@ attribute = "Underlined"
         fs::write(filename, initial_content)?;
     }
 
-    let mut content = fs::read_to_string(filename)?;
-    let mut value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let content = fs::read_to_string(filename)?;
+    let value: Value = toml::from_str(&content)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("Failed to parse TOML: {}", e)))?;
 
-    if let Value::Table(ref mut table) = value {
-        if !table.contains_key("0") {
-            let mut initial_0_section = toml::map::Map::new();
-            initial_0_section.insert("A".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("B".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("C".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("D".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("E".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("F".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("G".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("H".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("I".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("J".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("K".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("L".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("M".to_string(), Value::String("".to_string()));
-            initial_0_section.insert("N".to_string(), Value::String("".to_string()));
-
-            table.insert("0".to_string(), Value::Table(initial_0_section));
-            content = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-            fs::write(filename, content.clone())?;
-        }
-    }
-
-    let value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let mut func_map = HashMap::new();
     let mut const_map = HashMap::new();
     let mut custom_color = None;
@@ -166,6 +142,8 @@ attribute = "Underlined"
                     for (const_key, const_value) in const_table {
                         if let Value::String(const_string) = const_value {
                             const_map.insert(const_key, const_string);
+                        } else {
+                            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid format in [const] section"));
                         }
                     }
                 }
@@ -179,11 +157,15 @@ attribute = "Underlined"
                 for (command_key, command_value) in command_table {
                     if let Value::String(command_string) = command_value {
                         commands.insert(command_key, command_string);
+                    } else {
+                        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Invalid command value in [{}]", key)));
                     }
                 }
                 func_map.insert(key.to_lowercase(), commands);
             }
         }
+    } else {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "TOML root is not a table"));
     }
 
     Ok((func_map, const_map, custom_color, custom_attribute))
@@ -193,7 +175,16 @@ fn main() -> io::Result<()> {
     let exe_path = env::current_exe()?;
     let exe_dir = exe_path.parent().unwrap();
     let func_toml_path = exe_dir.join(".func.toml");
-    let (func_map, const_map, custom_color, custom_attribute) = load_func_commands_from_file(&func_toml_path)?;
+
+    let (func_map, const_map, custom_color, custom_attribute) = match load_func_commands_from_file(&func_toml_path) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("Error loading function commands from file: {}", e);
+            wait_for_keypress("Press any key to exit...");
+            return Err(e);
+        }
+    };
+
     let args = Args::parse();
     let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
     let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| (
@@ -221,6 +212,20 @@ fn main() -> io::Result<()> {
     result
 }
 
+fn wait_for_keypress(message: &str) {
+    use crossterm::event::{read, Event, KeyCode};
+
+    println!("{}", message);
+
+    loop {
+        if let Ok(Event::Key(key_event)) = read() {
+            if let KeyCode::Char(_) | KeyCode::Enter | KeyCode::Esc = key_event.code {
+                break;
+            }
+        }
+    }
+}
+
 fn run_app(
     filename: &Path,
     inputs: &mut Vec<String>,
@@ -237,10 +242,10 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 47;
     let output_width = 23;
-    let title = " RS Mathematical Tools                                                   V1.2.4 ";
+    let title = " RS Mathematical Tools                               (Window: 80 x 40) - V1.2.5 ";
     let heade = "                     Result  =  Mathematical Expression                         ";
     let foote = " About | Rate | fc.1-9 | cst.a-z                       https://github.com/pasdq ";
-    let saved = "[ ---------------------------- Recalculate & saved! -------------------------- ]";
+    let saved = "[ ---------------------------- Recalculate & Saved! -------------------------- ]";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
     let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
@@ -646,7 +651,7 @@ let tui_attribute = match default_attribute.as_str() {
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "about" {
                                 inputs[current_row].clear();
-                                inputs[current_row].push_str("# RS Mathematical Tools V1.2.4");
+                                inputs[current_row].push_str("# RS Mathematical Tools V1.2.5");
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "rate" {
                                 inputs[current_row].clear();
