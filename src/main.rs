@@ -540,12 +540,11 @@ fn run_app(
                         break;
                     }
                     (KeyCode::PageUp, KeyEventKind::Press) => {
-                        handle_page_up(current_section.clone(), func_map, inputs, func_toml_path);
-                    }
-                    
+                    handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+		    }
                     (KeyCode::PageDown, KeyEventKind::Press) => {
-                        handle_page_down(current_section.clone(), func_map, inputs, func_toml_path);
-                    }
+                    handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+		    }
 		    (KeyCode::F(4), KeyEventKind::Press) => {
                         let mut lock_state_guard = lock_state.write().unwrap();
                         *lock_state_guard = !*lock_state_guard;
@@ -1101,22 +1100,48 @@ fn get_next_section(func_map: &HashMap<String, HashMap<String, String>>, current
     }
 }
 
-/// 循环切换 section
-fn handle_page_up(current_section: Arc<RwLock<String>>, func_map: &mut HashMap<String, HashMap<String, String>>, inputs: &mut Vec<String>, func_toml_path: &Path) {
+/// 上翻页
+fn handle_page_up(
+    current_section: Arc<RwLock<String>>,
+    func_map: &mut HashMap<String, HashMap<String, String>>,
+    inputs: &mut Vec<String>,
+    func_toml_path: &Path,
+    current_row: &mut usize,
+    current_pos: &mut usize,
+) {
     let new_section = {
         let current_section_name = current_section.read().unwrap().clone();
         get_next_section(func_map, &current_section_name, true)
     };
     *current_section.write().unwrap() = new_section.clone();
     load_section(&new_section, inputs, func_toml_path);
+
+    *current_row = 0;
+    *current_pos = 0;
+    let mut stdout = io::stdout();
+    queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
+    stdout.flush().unwrap();
 }
 
-/// 循环切换 section
-fn handle_page_down(current_section: Arc<RwLock<String>>, func_map: &mut HashMap<String, HashMap<String, String>>, inputs: &mut Vec<String>, func_toml_path: &Path) {
+/// 下翻页
+fn handle_page_down(
+    current_section: Arc<RwLock<String>>,
+    func_map: &mut HashMap<String, HashMap<String, String>>,
+    inputs: &mut Vec<String>,
+    func_toml_path: &Path,
+    current_row: &mut usize,
+    current_pos: &mut usize,
+) {
     let new_section = {
         let current_section_name = current_section.read().unwrap().clone();
         get_next_section(func_map, &current_section_name, false)
     };
     *current_section.write().unwrap() = new_section.clone();
     load_section(&new_section, inputs, func_toml_path);
+    
+    *current_row = 0;
+    *current_pos = 0;
+    let mut stdout = io::stdout();
+    queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
+    stdout.flush().unwrap();
 }
