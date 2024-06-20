@@ -3,6 +3,14 @@
 > [!TIP]
 > RS Mathematical Tools is a powerful Rust-based command-line application designed for evaluating mathematical expressions and solving linear equations. It utilizes several crates like regex, evalexpr, crossterm, and clap to provide a robust user interface and extensive functionality for mathematical computations.
 
+
+- Expression Evaluation: Supports complex mathematical expressions with variable substitution.
+- Equation Solving: Capable of solving linear equations.
+- Customizable Interface: Allows users to customize text color and attributes in the TUI (Text User Interface).
+- Function Commands: Enables predefined calculations using function commands from a configuration file.
+- Persistent State: Saves and loads input states to and from a configuration file.
+
+
 ![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/878095ed-534f-473e-a8c7-bcc7e4e5dabc)
 
 When the program starts, it will by default read the .last.txt file in the current directory. If the file does not exist, the program will create a new one. Starting from line 15, the program will display its contents in the TUI interface.
