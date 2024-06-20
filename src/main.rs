@@ -643,42 +643,44 @@ fn run_app(
                         }
                     }
                     (KeyCode::Enter, KeyEventKind::Press) => {
-                        if !is_locked {
-                            let input_command = inputs[current_row].clone().to_lowercase();
-                            if handle_func_command(&input_command, inputs, func_map, const_map, current_row, func_toml_path) {
-                                current_pos = inputs[current_row].len();
-                                *current_section.write().unwrap() = input_command[3..].to_string();
-                            } else if input_command == "about" {
-                                inputs[current_row].clear();
-                                inputs[current_row].push_str("# RS Mathematical Tools V1.2.5");
-                                current_pos = inputs[current_row].len();
-                            } else if input_command == "rate" {
-                                inputs[current_row].clear();
-                                let exe_path = env::current_exe().unwrap();
-                                let exe_dir = exe_path.parent().unwrap();
-                                let command_path = if cfg!(target_os = "windows") {
-                                    exe_dir.join("rate.exe")
-                                } else {
-                                    exe_dir.join("./rate")
-                                };
-                                let output = std::process::Command::new(command_path).output();
-                                match output {
-                                    Ok(output) => {
-                                        let result = String::from_utf8_lossy(&output.stdout);
-                                        let trimmed_result = result.trim();
-                                        inputs[current_row].push_str(trimmed_result);
-                                    }
-                                    Err(_) => {
-                                        inputs[current_row].push_str("The rate command was not found!");
-                                    }
-                                }
-                                current_pos = inputs[current_row].len();
-                            } else {
-                                current_row = (current_row + 1) % inputs.len();
-                                current_pos = inputs[current_row].len();
-                            }
+            if !is_locked {
+                let input_command = inputs[current_row].clone().to_lowercase();
+                if input_command.starts_with("fc.") && handle_func_command(&input_command, inputs, func_map, const_map, current_row, func_toml_path) {
+                    current_pos = inputs[current_row].len();
+                    *current_section.write().unwrap() = input_command[3..].to_string();
+                } else if input_command.starts_with("cst.") && handle_func_command(&input_command, inputs, func_map, const_map, current_row, func_toml_path) {
+                    current_pos = inputs[current_row].len();
+                } else if input_command == "about" {
+                    inputs[current_row].clear();
+                    inputs[current_row].push_str("# RS Mathematical Tools V1.2.5");
+                    current_pos = inputs[current_row].len();
+                } else if input_command == "rate" {
+                    inputs[current_row].clear();
+                    let exe_path = env::current_exe().unwrap();
+                    let exe_dir = exe_path.parent().unwrap();
+                    let command_path = if cfg!(target_os = "windows") {
+                        exe_dir.join("rate.exe")
+                    } else {
+                        exe_dir.join("./rate")
+                    };
+                    let output = std::process::Command::new(command_path).output();
+                    match output {
+                        Ok(output) => {
+                            let result = String::from_utf8_lossy(&output.stdout);
+                            let trimmed_result = result.trim();
+                            inputs[current_row].push_str(trimmed_result);
+                        }
+                        Err(_) => {
+                            inputs[current_row].push_str("The rate command was not found!");
                         }
                     }
+                    current_pos = inputs[current_row].len();
+                } else {
+                    current_row = (current_row + 1) % inputs.len();
+                    current_pos = inputs[current_row].len();
+                }
+            }
+        }
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
                             inputs[current_row].insert(current_pos, c);
