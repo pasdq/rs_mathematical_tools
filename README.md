@@ -69,4 +69,4 @@ Supported Attributes
 
 
 > [!NOTE]
-> Please refer to the release notes for other features.
+> For any questions or suggestions, please open an issue on the GitHub repository. Enjoy using RS Mathematical Tools for your mathematical computations!
