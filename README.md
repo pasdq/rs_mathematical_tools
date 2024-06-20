@@ -31,19 +31,42 @@ You can enter the keyword `rate` to obtain the US dollar exchange rate.
 
 It supports cursor movement using the up and down arrow keys and the Tab key, as well as mouse operations. Additionally, it has several shortcut keys.
 
-```
-CTRL+T MOVE TO THE TOP
-CTRL+B MOVE TO THE BOTTOM
-CTRL+A MOVE TO THE HEAD
-CTRL+E MOVE TO THE TAIL
+    Navigation:
+        ↑ and ↓: Move between input fields.
+        ← and →: Move within an input field.
+        PageUp and PageDown: Switch between sections.
+    Editing:
+        Enter: Evaluate the current expression or execute a command.
+        Ctrl + U: Clear all inputs.
+        Ctrl + L: Clear the current input.
+        Backspace: Delete the character to the left of the cursor.
+    Miscellaneous:
+        Ctrl + C: Exit the program.
+        F4: Toggle between locked and unlocked status.
+        F5: Save current inputs to the file.
 
-CTRL+L CLEAR CURRENT
-CTRL+U CLEAR ALL
+**Commands**
 
-F4 OPEN & CLOSE INPUT
-F5 RECALCULATE AND SAVE
-CTRL+C SAVE & EXIT
-```
+    Function Commands (fc.*): Load predefined inputs from the .func.toml file.
+        Example: fc.section_name
+    Constant Commands (cst.*): Insert predefined constant values.
+        Example: cst.item_name
+    Special Commands:
+        about: Display information about the program.
+        rate: Execute an external rate calculation command.
+
+**Customization**
+
+Customize the TUI by setting the color and attribute fields in the [TUI] section.
+Supported Colors
+
+    Blue, Red, Green, Yellow, Magenta, Cyan, White, Black, DarkRed, DarkGreen, DarkYellow, DarkBlue, DarkMagenta, DarkCyan, Grey, DarkGrey
+
+
+Supported Attributes
+
+    Bold, Underlined, Reverse, NoBold, NoUnderline, NoReverse, Italic, NoItalic, Dim, NormalIntensity, SlowBlink, RapidBlink, NoBlink, Hidden, NoHidden, CrossedOut, NotCrossedOut
+
 
 > [!NOTE]
 > Please refer to the release notes for other features.
