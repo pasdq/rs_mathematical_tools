@@ -1,7 +1,7 @@
 # RS Mathematical Tools
 
 > [!TIP]
-> This is a mathematical tool (calculator) developed using Rust, featuring a clean and clear TUI interface that runs perfectly on both Linux and Windows platforms.
+> RS Mathematical Tools is a powerful Rust-based command-line application designed for evaluating mathematical expressions and solving linear equations. It utilizes several crates like regex, evalexpr, crossterm, and clap to provide a robust user interface and extensive functionality for mathematical computations.
 
 ![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/878095ed-534f-473e-a8c7-bcc7e4e5dabc)
 
