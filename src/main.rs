@@ -617,18 +617,18 @@ fn run_app(
                             current_pos = inputs[current_row].len();
                         }
                     }
-                    (KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
-                        if !is_locked && current_row + 1 < inputs.len() {
-                            current_row += 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Up, KeyEventKind::Press) => {
-                        if !is_locked && current_row > 0 {
-                            current_row -= 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
+		(KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
+                if !is_locked && current_row < inputs.len() - 1 {
+                    current_row += 1;
+                    current_pos = inputs[current_row].len();
+                }
+            }
+            (KeyCode::Up, KeyEventKind::Press) => {
+                if !is_locked && current_row > 0 {
+                    current_row -= 1;
+                    current_pos = inputs[current_row].len();
+                }
+            }
                     (KeyCode::Left, KeyEventKind::Press) => {
                         if !is_locked && current_pos > 0 {
                             current_pos -= 1;
