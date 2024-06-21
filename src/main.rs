@@ -44,58 +44,62 @@ struct Args {
     filename: Option<String>,
 }
 
-fn handle_func_command(
+fn handle_fc_command(
     command: &str,
     inputs: &mut Vec<String>,
     func_map: &mut HashMap<String, HashMap<String, String>>,
-    const_map: &HashMap<String, String>,
-    current_row: usize,
     func_toml_path: &Path
 ) -> bool {
-    if command.starts_with("fc.") {
-        let key = &command[3..];
-        // 重新加载 .func.toml 文件
-        if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) = load_func_commands_from_file(func_toml_path) {
-            *func_map = new_func_map;
-        } else {
-            eprintln!("Failed to reload .func.toml");
-            return false;
-        }
+    let key = &command[3..];
+    // 重新加载 .func.toml 文件
+    if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) = load_func_commands_from_file(func_toml_path) {
+        *func_map = new_func_map;
+    } else {
+        eprintln!("Failed to reload .func.toml");
+        return false;
+    }
 
-        if let Some(commands) = func_map.get(key) {
-            for input in inputs.iter_mut().take(13) {
-                input.clear();
-            }
-            for (input_key, input_value) in commands {
-                let index = match input_key.as_str() {
-                    "A" => 0,
-                    "B" => 1,
-                    "C" => 2,
-                    "D" => 3,
-                    "E" => 4,
-                    "F" => 5,
-                    "G" => 6,
-                    "H" => 7,
-                    "I" => 8,
-                    "J" => 9,
-                    "K" => 10,
-                    "L" => 11,
-                    "M" => 12,
-                    "N" => 13,
-                    _ => {
-                        continue;
-                    }
-                };
-                inputs[index] = input_value.to_string();
-            }
-            return true;
+    if let Some(commands) = func_map.get(key) {
+        for input in inputs.iter_mut().take(13) {
+            input.clear();
         }
-    } else if command.starts_with("cst.") {
-        let key = &command[4..];
-        if let Some(value) = const_map.get(key) {
-            inputs[current_row] = value.to_string();
-            return true;
+        for (input_key, input_value) in commands {
+            let index = match input_key.as_str() {
+                "A" => 0,
+                "B" => 1,
+                "C" => 2,
+                "D" => 3,
+                "E" => 4,
+                "F" => 5,
+                "G" => 6,
+                "H" => 7,
+                "I" => 8,
+                "J" => 9,
+                "K" => 10,
+                "L" => 11,
+                "M" => 12,
+                "N" => 13,
+                _ => {
+                    continue;
+                }
+            };
+            inputs[index] = input_value.to_string();
         }
+        return true;
+    }
+    false
+}
+
+fn handle_const_command(
+    command: &str,
+    inputs: &mut Vec<String>,
+    const_map: &HashMap<String, String>,
+    current_row: usize,
+) -> bool {
+    // 直接从 const_map 中查找键值
+    if let Some(value) = const_map.get(command) {
+        inputs[current_row] = value.to_string();
+        return true;
     }
     false
 }
@@ -251,8 +255,8 @@ fn run_app(
     let input_width = 47;
     let output_width = 23;
     let title = " RS Mathematical Tools                                                   V1.2.5 ";
-    let heade = "                     Result  =  Mathematical Expression               ";
-    let foote = " About | Rate | fc.section | cst.item                  https://github.com/pasdq ";
+    let heade = "                     Result  =  Mathematical Expression                     ";
+    let foote = " About | Rate | fc.section                             https://github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -324,8 +328,8 @@ fn run_app(
             SetForegroundColor(Color::Blue),
             cursor::MoveTo(0, 2),
             Print(heade),
-	    cursor::MoveLeft(section_length + 1),
-            Print(format!("Section: [{}]", current_section_name)),
+	    cursor::MoveLeft(section_length + 2),
+            Print(format!("<- {} ->", current_section_name)),
             ResetColor
         )?;
 
@@ -539,10 +543,10 @@ fn run_app(
                     => {
                         break;
                     }
-                    (KeyCode::PageUp, KeyEventKind::Press) => {
+                    (KeyCode::Left, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
                     handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
 		    }
-                    (KeyCode::PageDown, KeyEventKind::Press) => {
+                    (KeyCode::Right, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
                     handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
 		    }
 		    (KeyCode::F(4), KeyEventKind::Press) => {
@@ -574,8 +578,8 @@ fn run_app(
                             current_pos = 0;
                         }
                     }
-                    (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
-                        save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
+		       (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
+			save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
                         show_saved_message = true;
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
                         variables.clear();
@@ -641,45 +645,48 @@ fn run_app(
                             current_pos -= 1;
                         }
                     }
-                    (KeyCode::Enter, KeyEventKind::Press) => {
-            if !is_locked {
-                let input_command = inputs[current_row].clone().to_lowercase();
-                if input_command.starts_with("fc.") && handle_func_command(&input_command, inputs, func_map, const_map, current_row, func_toml_path) {
-                    current_pos = inputs[current_row].len();
-                    *current_section.write().unwrap() = input_command[3..].to_string();
-                } else if input_command.starts_with("cst.") && handle_func_command(&input_command, inputs, func_map, const_map, current_row, func_toml_path) {
-                    current_pos = inputs[current_row].len();
-                } else if input_command == "about" {
-                    inputs[current_row].clear();
-                    inputs[current_row].push_str("# RS Mathematical Tools V1.2.5");
-                    current_pos = inputs[current_row].len();
-                } else if input_command == "rate" {
-                    inputs[current_row].clear();
-                    let exe_path = env::current_exe().unwrap();
-                    let exe_dir = exe_path.parent().unwrap();
-                    let command_path = if cfg!(target_os = "windows") {
-                        exe_dir.join("rate.exe")
-                    } else {
-                        exe_dir.join("./rate")
-                    };
-                    let output = std::process::Command::new(command_path).output();
-                    match output {
-                        Ok(output) => {
-                            let result = String::from_utf8_lossy(&output.stdout);
-                            let trimmed_result = result.trim();
-                            inputs[current_row].push_str(trimmed_result);
-                        }
-                        Err(_) => {
-                            inputs[current_row].push_str("The rate command was not found!");
-                        }
-                    }
-                    current_pos = inputs[current_row].len();
+                       (KeyCode::Enter, KeyEventKind::Press) => {
+        if !is_locked {
+            let input_command = inputs[current_row].clone().to_lowercase();
+            if input_command.starts_with("fc.") && handle_fc_command(&input_command, inputs, func_map, func_toml_path) {
+                current_pos = inputs[current_row].len();
+                *current_section.write().unwrap() = input_command[3..].to_string();
+            } else if handle_const_command(&input_command, inputs, const_map, current_row) {
+                current_pos = inputs[current_row].len();
+            } else if input_command == "clear" || input_command == "cls" {
+				if !is_locked {
+				for input in inputs.iter_mut().take(13) {
+				input.clear();
+				}
+				current_pos = 0; current_row = 0;
+				}
+            } else if input_command == "rate" {
+                inputs[current_row].clear();
+                let exe_path = env::current_exe().unwrap();
+                let exe_dir = exe_path.parent().unwrap();
+                let command_path = if cfg!(target_os = "windows") {
+                    exe_dir.join("rate.exe")
                 } else {
-                    current_row = (current_row + 1) % inputs.len();
-                    current_pos = inputs[current_row].len();
+                    exe_dir.join("./rate")
+                };
+                let output = std::process::Command::new(command_path).output();
+                match output {
+                    Ok(output) => {
+                        let result = String::from_utf8_lossy(&output.stdout);
+                        let trimmed_result = result.trim();
+                        inputs[current_row].push_str(trimmed_result);
+                    }
+                    Err(_) => {
+                        inputs[current_row].push_str("The rate command was not found!");
+                    }
                 }
+                current_pos = inputs[current_row].len();
+            } else {
+                current_row = (current_row + 1) % inputs.len();
+                current_pos = inputs[current_row].len();
             }
         }
+    }
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
                             inputs[current_row].insert(current_pos, c);
