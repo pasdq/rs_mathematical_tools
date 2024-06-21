@@ -41,7 +41,7 @@ It supports cursor movement using the up and down arrow keys and the Tab key, as
     Navigation:
         ↑ and ↓: Move between input fields.
         ← and →: Move within an input field.
-        Ctrl + ← →: Switch between sections.
+        Ctrl + ← →: Switch between session.
     Editing:
         Enter: Evaluate the current expression or execute a command.
         Ctrl + U: Clear all inputs.
