@@ -258,7 +258,7 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 47;
     let output_width = 23;
-    let title = " RS Mathematical Tools                                                   V1.2.5 ";
+    let title = " RS Mathematical Tools                                                   V1.2.6 ";
     let heade = "                     Result  =  Mathematical Expression                     ";
     let foote = " About | Rate | fc.section                             https://github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
@@ -266,9 +266,9 @@ fn run_app(
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
     let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
 
-    let _tui_color = match default_color.as_str() {
+    let tui_color = match default_color.as_str() {
         "Blue" => Color::Blue,
-		        "Red" => Color::Red,
+        "Red" => Color::Red,
         "Green" => Color::Green,
         "Yellow" => Color::Yellow,
         "Magenta" => Color::Magenta,
@@ -286,7 +286,7 @@ fn run_app(
         _ => Color::Green, // Fallback color
     };
 
-    let _tui_attribute = match default_attribute.as_str() {
+    let tui_attribute = match default_attribute.as_str() {
         "Bold" => Attribute::Bold,
         "Underlined" => Attribute::Underlined,
         "Reverse" => Attribute::Reverse,
@@ -332,7 +332,7 @@ fn run_app(
             SetForegroundColor(Color::Blue),
             cursor::MoveTo(0, 2),
             Print(heade),
-	    cursor::MoveLeft(section_length + 2),
+            cursor::MoveLeft(section_length + 2),
             Print(format!("<- {} ->", current_section_name)),
             ResetColor
         )?;
@@ -356,37 +356,119 @@ fn run_app(
                     }
                 }
             };
-            // 在此添加显示结果的逻辑
+
             if i == current_row {
-                queue!(
-                    buffer,
-                    cursor::MoveTo(0, (i + 3) as u16),
-                    Print(
-                        format!(
-                            "{}: [{:>width$}] = [{:<input_width$}]",
-                            label,
-                            result,
-                            input,
-                            width = output_width,
-                            input_width = input_width
-                        )
-                    )
-                )?;
+                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
+                    queue!(
+                        buffer,
+                        SetForegroundColor(
+                            if input.starts_with("fc.") {
+                                Color::Blue
+                            } else {
+                                Color::DarkRed
+                            }
+                        ),
+                        cursor::MoveTo(0, (i + 3) as u16),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                if input.starts_with("fc.") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
+                        ResetColor
+                    )?;
+                } else {
+                    if !is_locked {
+                        queue!(
+                            buffer,
+                            SetForegroundColor(tui_color),
+                            SetAttribute(tui_attribute),
+                            cursor::MoveTo(0, (i + 3) as u16),
+                            Print(
+                                format!(
+                                    "{}: [{:>width$}] = [{:<input_width$}]",
+                                    label,
+                                    result,
+                                    input,
+                                    width = output_width,
+                                    input_width = input_width
+                                )
+                            ),
+                            ResetColor
+                        )?;
+                    } else {
+                        queue!(
+                            buffer,
+                            SetForegroundColor(if i >= 12 { Color::Blue } else { tui_color }),
+                            cursor::MoveTo(0, (i + 3) as u16),
+                            Print(
+                                format!(
+                                    "{}: [{:>width$}] = [{:<input_width$}]",
+                                    label,
+                                    result,
+                                    input,
+                                    width = output_width,
+                                    input_width = input_width
+                                )
+                            ),
+                            ResetColor
+                        )?;
+                    }
+                }
             } else {
-                queue!(
-                    buffer,
-                    cursor::MoveTo(0, (i + 3) as u16),
-                    Print(
-                        format!(
-                            "{}: [{:>width$}] = [{:<input_width$}]",
-                            label,
-                            result,
-                            input,
-                            width = output_width,
-                            input_width = input_width
-                        )
-                    )
-                )?;
+                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
+                    queue!(
+                        buffer,
+                        SetForegroundColor(
+                            if input.starts_with("fc.") {
+                                Color::Blue
+                            } else {
+                                Color::DarkRed
+                            }
+                        ),
+                        cursor::MoveTo(0, (i + 3) as u16),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                if input.starts_with("fc.") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
+                        ResetColor
+                    )?;
+                } else {
+                    queue!(
+                        buffer,
+                        SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Reset }),
+                        cursor::MoveTo(0, (i + 3) as u16),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                result,
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
+                        ResetColor
+                    )?;
+                }
             }
 
             if result != "Error" {
@@ -396,6 +478,7 @@ fn run_app(
             }
             results.push(result);
         }
+
         let (sum, valid_count) = calculate_sum_and_count(&results);
         let average = if valid_count > 0 { sum / (valid_count as f64) } else { 0.0 };
         queue!(
@@ -417,7 +500,7 @@ fn run_app(
             cursor::MoveTo(22, 20),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
             Print(
-                format!("Status = {} (F4 Status Switch)", if is_locked {
+                                format!("Status = {} (F4 Status Switch)", if is_locked {
                     "Locked"
                 } else {
                     "Opened"
@@ -433,7 +516,7 @@ fn run_app(
                 buffer,
                 cursor::MoveTo(0, 17),
                 SetForegroundColor(Color::DarkYellow),
-		Print(format!("{} -> Section: [{}]", saved, current_section_name)),
+                Print(format!("{} -> Section: [{}]", saved, current_section_name)),
                 ResetColor
             )?;
             show_saved_message = false;
@@ -469,9 +552,11 @@ fn run_app(
                     }
                     (KeyCode::Left, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
                         handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                        clear_undo_stack(&undo_stack); // 清空撤销栈
                     }
                     (KeyCode::Right, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
                         handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                        clear_undo_stack(&undo_stack); // 清空撤销栈
                     }
                     (KeyCode::F(4), KeyEventKind::Press) => {
                         let mut lock_state_guard = lock_state.write().unwrap();
@@ -504,11 +589,11 @@ fn run_app(
                             current_pos = 0;
                         }
                     }
-					( KeyCode::Char('z'), KeyEventKind::Press ) if modifiers.contains(KeyModifiers::CONTROL) => {
-						if !is_locked {
-							undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
-						}
-					}
+                    (KeyCode::Char('z'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                        if !is_locked {
+                            undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
+                        }
+                    }
                     (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
                         save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
                         show_saved_message = true;
@@ -615,7 +700,7 @@ fn run_app(
                                 }
                                 current_pos = inputs[current_row].len();
                             } else if input_command.starts_with("s:") {
-                                // Handle k: command
+                                // Handle s: command
                                 let command = &input_command[2..].trim();
                                 match execute_qalc_command(command) {
                                     Ok(result) => {
@@ -635,7 +720,7 @@ fn run_app(
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
                             push_undo_stack(&undo_stack, &inputs); // 保存当前状态
-                            inputs[current_row].insert(current_pos, c);
+                                                        inputs[current_row].insert(current_pos, c);
                             current_pos += 1;
                         }
                     }
@@ -1157,4 +1242,10 @@ fn undo(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>, inputs: &mut Vec<String>, cu
             }
         }
     }
+}
+
+/// 清空撤销栈
+fn clear_undo_stack(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>) {
+    let mut stack = undo_stack.write().unwrap();
+    stack.clear();
 }
