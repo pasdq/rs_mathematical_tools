@@ -256,11 +256,11 @@ fn run_app(
     let mut variables = HashMap::new();
     let mut current_row = 0;
     let mut current_pos = 0;
-    let input_width = 47;
+    let input_width = 57;
     let output_width = 23;
-    let title = " RS Mathematical Tools                                                   V1.2.6 ";
-    let heade = "                     Result  =  Mathematical Expression                     ";
-    let foote = " About | Rate | fc.section                             https://github.com/pasdq ";
+    let title = " RS Mathematical Tools                                                             V1.2.6 ";
+    let heade = "                     Result  =  Mathematical Expression                               ";
+    let foote = " About | Rate | fc.section                                       https://github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -594,7 +594,7 @@ fn run_app(
                             undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
                         }
                     }
-                    (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
+						(KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
                         save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
                         show_saved_message = true;
                         queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
@@ -615,6 +615,17 @@ fn run_app(
                         if !is_locked {
                             current_row = 0;
                             current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::Char('d'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                        if !is_locked {
+                            if !inputs[current_row].trim().is_empty() {
+                                if current_row < inputs.len() - 1 {
+                                    inputs[current_row + 1] = inputs[current_row].clone();
+                                    current_row += 1;
+                                    current_pos = inputs[current_row].len();
+                                }
+                            }
                         }
                     }
                     (KeyCode::Char('a'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
