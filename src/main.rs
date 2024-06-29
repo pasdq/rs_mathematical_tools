@@ -596,7 +596,7 @@ fn run_app(
                         undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
                     }
                 }
-                (KeyCode::F(5), KeyEventKind::Press) => {
+                (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
                     save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
                     show_saved_message = true;
                     queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
