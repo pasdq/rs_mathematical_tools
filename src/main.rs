@@ -38,6 +38,15 @@ use clap::Parser;
 use std::env;
 use toml::Value;
 
+#[macro_use]
+extern crate lazy_static;
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref GLOBAL_SUM: Mutex<f64> = Mutex::new(0.0);
+    static ref GLOBAL_COUNT: Mutex<usize> = Mutex::new(0);
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -309,7 +318,7 @@ fn run_app(
 
     enable_raw_mode()?;
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    
+
     queue!(
         stdout,
         Clear(ClearType::All),
@@ -318,7 +327,7 @@ fn run_app(
         Print(title),
         ResetColor
     )?;
-    
+
     let result = loop {
         let is_locked = *lock_state.read().unwrap();
         let current_section_name = current_section.read().unwrap().clone();
@@ -343,7 +352,7 @@ fn run_app(
             let result = if input.trim().is_empty() {
                 "".to_string()
             } else {
-                match evaluate_and_solve(input, &variables) {
+                match evaluate_and_solve(input, &variables, i) {
                     Ok(res) => {
                         if res.len() <= output_width - 3 { res } else { "Error".to_string() }
                     }
@@ -407,7 +416,7 @@ fn run_app(
                     } else {
                         queue!(
                             buffer,
-                            SetForegroundColor(if i >= 12 { Color::Blue } else { tui_color }),
+                            SetForegroundColor(if i >= 11 { Color::Blue } else { tui_color }),
                             cursor::MoveTo(0, (i + 3) as u16),
                             Print(
                                 format!(
@@ -454,7 +463,7 @@ fn run_app(
                 } else {
                     queue!(
                         buffer,
-                        SetForegroundColor(if i >= 12 { Color::Blue } else { Color::Reset }),
+                        SetForegroundColor(if i >= 11 { Color::Blue } else { Color::Reset }),
                         cursor::MoveTo(0, (i + 3) as u16),
                         Print(
                             format!(
@@ -488,29 +497,25 @@ fn run_app(
             cursor::MoveTo(0, (inputs.len() + 5) as u16),
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
-            cursor::MoveTo(17, (inputs.len() + 4) as u16),
-            Print(format!("(A - L) Sum = {}", format_with_thousands_separator(sum))),
+            cursor::MoveTo(13, (inputs.len() + 4) as u16),
+            Print(format!("(A - K) Sum = Z = {}", format_with_thousands_separator(sum))),
             cursor::MoveTo(13, (inputs.len() + 5) as u16),
-            Print(format!("(A - L) Average = {}", format_with_thousands_separator(average))),
+            Print(format!("(A - K) Average = {}", format_with_thousands_separator(average))),
             cursor::MoveTo(0, (inputs.len() + 8) as u16),
             ResetColor,
-            SetAttribute(Attribute::Reverse),
+	                SetAttribute(Attribute::Reverse),
             Print(foote),
             ResetColor,
             cursor::MoveTo(22, 20),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
             Print(
-                                format!("Status = {} (F4 Status Switch)", if is_locked {
-                    "Locked"
-                } else {
-                    "Opened"
-                })
+                format!("Status = {} (F4 Status Switch)", if is_locked { "Locked" } else { "Opened" })
             ),
             ResetColor,
             cursor::MoveTo(0, (inputs.len() + 9) as u16),
             ResetColor
         )?;
-        
+
         if show_saved_message {
             queue!(
                 buffer,
@@ -523,7 +528,7 @@ fn run_app(
         } else {
             queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?;
         }
-        
+
         for (i, line) in additional_lines.iter().enumerate() {
             queue!(buffer, cursor::MoveTo(0, (inputs.len() + 10 + i) as u16), Print(line))?;
         }
@@ -538,265 +543,277 @@ fn run_app(
                 cursor::Show
             )?;
         }
-        
+
         stdout.write_all(&buffer)?;
         stdout.flush()?;
-        
+
         match event::read()? {
-            Event::Key(KeyEvent { code, modifiers, kind, .. }) =>
-                match (code, kind) {
-                    (KeyCode::Char('c'), KeyEventKind::Press) if
-                        modifiers.contains(KeyModifiers::CONTROL)
-                    => {
-                        break;
+            Event::Key(KeyEvent { code, modifiers, kind, .. }) => match (code, kind) {
+                (KeyCode::Char('c'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    break;
+                }
+                (KeyCode::Left, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                    clear_undo_stack(&undo_stack); // 清空撤销栈
+                }
+                (KeyCode::Right, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                    clear_undo_stack(&undo_stack); // 清空撤销栈
+                }
+                (KeyCode::F(4), KeyEventKind::Press) => {
+                    let mut lock_state_guard = lock_state.write().unwrap();
+                    *lock_state_guard = !*lock_state_guard;
+                    if *lock_state_guard {
+                        queue!(stdout, cursor::Hide)?;
+                    } else {
+                        queue!(stdout, cursor::Show)?;
                     }
-                    (KeyCode::Left, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
-                        clear_undo_stack(&undo_stack); // 清空撤销栈
+                }
+                (KeyCode::Char('u'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        push_undo_stack(&undo_stack, &inputs); // 保存当前状态, 清理A-K
+                        for input in inputs.iter_mut().take(11) {
+                            input.clear();
+                        }
+                        for label in (b'A'..=b'L').map(|c| (c as char).to_string()) {
+                            variables.remove(&label);
+                        }
+                        current_pos = 0;
+                        current_row = 0;
                     }
-                    (KeyCode::Right, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
-                        clear_undo_stack(&undo_stack); // 清空撤销栈
+                }
+                (KeyCode::Char('l'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                        let label = (b'A' + (current_row as u8)) as char;
+                        inputs[current_row].clear();
+                        variables.remove(&label.to_string());
+                        current_pos = 0;
                     }
-                    (KeyCode::F(4), KeyEventKind::Press) => {
-                        let mut lock_state_guard = lock_state.write().unwrap();
-                        *lock_state_guard = !*lock_state_guard;
-                        if *lock_state_guard {
-                            queue!(stdout, cursor::Hide)?;
-                        } else {
-                            queue!(stdout, cursor::Show)?;
+                }
+                (KeyCode::Char('z'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
+                    }
+                }
+                (KeyCode::F(5), KeyEventKind::Press) => {
+                    save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
+                    show_saved_message = true;
+                    queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
+                    variables.clear();
+                    for (i, input) in inputs.iter().enumerate() {
+                        let label = (b'A' + (i as u8)) as char;
+                        if !input.trim().is_empty() {
+                            match evaluate_and_solve(input, &variables, i) {
+                                Ok(res) => {
+                                    variables.insert(label.to_string(), res);
+                                }
+                                Err(_) => {}
+                            }
                         }
                     }
-                    (KeyCode::Char('u'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
-                            for input in inputs.iter_mut().take(13) {
-                                input.clear();
+                }
+                (KeyCode::Char('t'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        current_row = 0;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                (KeyCode::Char('d'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        if !inputs[current_row].trim().is_empty() {
+                            if current_row < inputs.len() - 1 {
+                                inputs[current_row + 1] = inputs[current_row].clone();
+                                current_row += 1;
+                                current_pos = inputs[current_row].len();
                             }
-                            for label in (b'A'..=b'L').map(|c| (c as char).to_string()) {
-                                variables.remove(&label);
-                            }
-                            current_pos = 0;
-                            current_row = 0;
                         }
                     }
-                    (KeyCode::Char('l'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
-                            let label = (b'A' + (current_row as u8)) as char;
+                }
+                (KeyCode::Char('a'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        current_pos = 0;
+                    }
+                }
+                (KeyCode::Char('b'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        current_row = inputs.len() - 1;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                (KeyCode::Char('e'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if !is_locked {
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                (KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
+                    if !is_locked && current_row < inputs.len() - 1 {
+                        current_row += 1;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                (KeyCode::Up, KeyEventKind::Press) => {
+                    if !is_locked && current_row > 0 {
+                        current_row -= 1;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                (KeyCode::Left, KeyEventKind::Press) => {
+                    if !is_locked && current_pos > 0 {
+                        current_pos -= 1;
+                    }
+                }
+                (KeyCode::Right, KeyEventKind::Press) => {
+                    if !is_locked && current_pos < inputs[current_row].len() {
+                        current_pos += 1;
+                    }
+                }
+                (KeyCode::Backspace, KeyEventKind::Press) => {
+                    if !is_locked && current_pos > 0 {
+                        push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                        inputs[current_row].remove(current_pos - 1);
+                        current_pos -= 1;
+                    }
+                }
+                (KeyCode::Delete, KeyEventKind::Press) => {
+                    if !is_locked && current_pos < inputs[current_row].len() {
+                        push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                        inputs[current_row].remove(current_pos);
+                    }
+                }
+                (KeyCode::Enter, KeyEventKind::Press) => {
+                    if !is_locked {
+                        let input_command = inputs[current_row].clone().to_lowercase();
+                        if input_command.starts_with("fc.") && handle_fc_command(&input_command, inputs, func_map, func_toml_path) {
+                            current_pos = inputs[current_row].len();
+                            *current_section.write().unwrap() = input_command[3..].to_string();
+                        } else if handle_const_command(&input_command, inputs, const_map, current_row) {
+                            current_pos = inputs[current_row].len();
+                        } else if input_command == "clear" || input_command == "cls" {
+                            if !is_locked {
+                                for input in inputs.iter_mut().take(13) {
+                                    input.clear();
+                                }
+                                current_pos = 0;
+                                current_row = 0;
+                            }
+                        } else if input_command == "rate" {
                             inputs[current_row].clear();
-                            variables.remove(&label.to_string());
-                            current_pos = 0;
-                        }
-                    }
-                    (KeyCode::Char('z'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
-                        }
-                    }
-						(KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
-                        save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
-                        show_saved_message = true;
-                        queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
-                        variables.clear();
-                        for (i, input) in inputs.iter().enumerate() {
-                            let label = (b'A' + (i as u8)) as char;
-                            if !input.trim().is_empty() {
-                                match evaluate_and_solve(input, &variables) {
-                                    Ok(res) => {
-                                        variables.insert(label.to_string(), res);
-                                    }
-                                    Err(_) => {}
-                                }
-                            }
-                        }
-                    }
-                    (KeyCode::Char('t'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            current_row = 0;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Char('d'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            if !inputs[current_row].trim().is_empty() {
-                                if current_row < inputs.len() - 1 {
-                                    inputs[current_row + 1] = inputs[current_row].clone();
-                                    current_row += 1;
-                                    current_pos = inputs[current_row].len();
-                                }
-                            }
-                        }
-                    }
-                    (KeyCode::Char('a'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            current_pos = 0;
-                        }
-                    }
-                    (KeyCode::Char('b'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            current_row = inputs.len() - 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Char('e'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                        if !is_locked {
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
-                        if !is_locked && current_row < inputs.len() - 1 {
-                            current_row += 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Up, KeyEventKind::Press) => {
-                        if !is_locked && current_row > 0 {
-                            current_row -= 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    (KeyCode::Left, KeyEventKind::Press) => {
-                        if !is_locked && current_pos > 0 {
-                            current_pos -= 1;
-                        }
-                    }
-                    (KeyCode::Right, KeyEventKind::Press) => {
-                        if !is_locked && current_pos < inputs[current_row].len() {
-                            current_pos += 1;
-                        }
-                    }
-                    (KeyCode::Backspace, KeyEventKind::Press) => {
-                        if !is_locked && current_pos > 0 {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
-                            inputs[current_row].remove(current_pos - 1);
-                            current_pos -= 1;
-                        }
-                    }
-                    (KeyCode::Enter, KeyEventKind::Press) => {
-                        if !is_locked {
-                            let input_command = inputs[current_row].clone().to_lowercase();
-                            if input_command.starts_with("fc.") && handle_fc_command(&input_command, inputs, func_map, func_toml_path) {
-                                current_pos = inputs[current_row].len();
-                                *current_section.write().unwrap() = input_command[3..].to_string();
-                            } else if handle_const_command(&input_command, inputs, const_map, current_row) {
-                                current_pos = inputs[current_row].len();
-                            } else if input_command == "clear" || input_command == "cls" {
-                                if !is_locked {
-                                    for input in inputs.iter_mut().take(13) {
-                                        input.clear();
-                                    }
-                                    current_pos = 0;
-                                    current_row = 0;
-                                }
-                            } else if input_command == "rate" {
-                                inputs[current_row].clear();
-                                let exe_path = env::current_exe().unwrap();
-                                let exe_dir = exe_path.parent().unwrap();
-                                let command_path = if cfg!(target_os = "windows") {
-                                    exe_dir.join("rate.exe")
-                                } else {
-                                    exe_dir.join("./rate")
-                                };
-                                let output = std::process::Command::new(command_path).output();
-                                match output {
-                                    Ok(output) => {
-                                        let result = String::from_utf8_lossy(&output.stdout);
-                                        let trimmed_result = result.trim();
-                                        inputs[current_row].push_str(trimmed_result);
-                                    }
-                                    Err(_) => {
-                                        inputs[current_row].push_str("The rate command was not found!");
-                                    }
-                                }
-                                current_pos = inputs[current_row].len();
-                            } else if input_command.starts_with("s:") {
-                                // Handle s: command
-                                let command = &input_command[2..].trim();
-                                match execute_qalc_command(command) {
-                                    Ok(result) => {
-                                        inputs[current_row] = result;
-                                    }
-                                    Err(err) => {
-                                        inputs[current_row] = err;
-                                    }
-                                }
-                                current_pos = inputs[current_row].len(); // Move the cursor to the end of the updated input
+                            let exe_path = env::current_exe().unwrap();
+                            let exe_dir = exe_path.parent().unwrap();
+                            let command_path = if cfg!(target_os = "windows") {
+                                exe_dir.join("rate.exe")
                             } else {
-                                current_row = (current_row + 1) % inputs.len();
-                                current_pos = inputs[current_row].len();
-                            }
-                        }
-                    }
-                    (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
-                        if inputs[current_row].len() < input_width {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
-                                                        inputs[current_row].insert(current_pos, c);
-                            current_pos += 1;
-                        }
-                    }
-                    _ => {}
-                }
-            Event::Mouse(MouseEvent { kind, column, row, .. }) =>
-                match kind {
-                    MouseEventKind::Down(MouseButton::Left) => {
-                        let clicked_row = (row as usize) - 3;
-                        if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
-                            current_row = clicked_row;
-                            current_pos = (column as usize) - (output_width + 9);
-                            if current_pos > inputs[current_row].len() {
-                                current_pos = inputs[current_row].len();
-                            }
-                            let label = (b'A' + (current_row as u8)) as char;
-                            let result = if inputs[current_row].trim().is_empty() {
-                                "".to_string()
-                            } else {
-                                match evaluate_and_solve(&inputs[current_row], &variables) {
-                                    Ok(res) => {
-                                        if res.len() <= output_width - 3 {
-                                            res
-                                        } else {
-                                            "Error".to_string()
-                                        }
-                                    }
-                                    Err(_) => "Error".to_string(),
-                                }
+                                exe_dir.join("./rate")
                             };
-                            queue!(
-                                buffer,
-                                cursor::MoveTo(0, (current_row + 3) as u16),
-                                Print(
-                                    format!(
-                                        "{}: [{:>width$}] = [{:<input_width$}]",
-                                        label,
-                                        result,
-                                        inputs[current_row],
-                                        width = output_width,
-                                        input_width = input_width
-                                    )
-                                )
-                            )?;
-                            stdout.write_all(&buffer)?;
-                            stdout.flush()?;
-                        }
-                    }
-                    MouseEventKind::ScrollDown => {
-                        if !is_locked && current_row + 1 < inputs.len() {
-                            current_row += 1;
+                            let output = std::process::Command::new(command_path).output();
+                            match output {
+                                Ok(output) => {
+                                    let result = String::from_utf8_lossy(&output.stdout);
+                                    let trimmed_result = result.trim();
+                                    inputs[current_row].push_str(trimmed_result);
+                                }
+                                Err(_) => {
+                                    inputs[current_row].push_str("The rate command was not found!");
+                                }
+                            }
+                            current_pos = inputs[current_row].len();
+                        } else if input_command.starts_with("s:") {
+                            // Handle s: command
+                                                        let command = &input_command[2..].trim();
+                            match execute_qalc_command(command) {
+                                Ok(result) => {
+                                    inputs[current_row] = result;
+                                }
+                                Err(err) => {
+                                    inputs[current_row] = err;
+                                }
+                            }
+                            current_pos = inputs[current_row].len(); // Move the cursor to the end of the updated input
+                        } else {
+                            current_row = (current_row + 1) % inputs.len();
                             current_pos = inputs[current_row].len();
                         }
                     }
-                    MouseEventKind::ScrollUp => {
-                        if !is_locked && current_row > 0 {
-                            current_row -= 1;
-                            current_pos = inputs[current_row].len();
-                        }
-                    }
-                    _ => {}
                 }
+                (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
+                    if inputs[current_row].len() < input_width {
+                        // 新增判断: 如果输入的是 'Z' 或 'z' 且当前行在 A-K 范围内
+                        if (c == 'Z' || c == 'z') && current_row <= 10 {
+                            inputs[current_row].clear();
+                            //inputs[current_row].push('0');
+                            inputs[current_row].push_str("# Global variable Z is limited to the L-N area only"); // 添加注释
+                        } else {
+                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                            inputs[current_row].insert(current_pos, c);
+                            current_pos += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+            Event::Mouse(MouseEvent { kind, column, row, .. }) => match kind {
+                MouseEventKind::Down(MouseButton::Left) => {
+                    let clicked_row = (row as usize) - 3;
+                    if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
+                        current_row = clicked_row;
+                        current_pos = (column as usize) - (output_width + 9);
+                        if current_pos > inputs[current_row].len() {
+                            current_pos = inputs[current_row].len();
+                        }
+                        let label = (b'A' + (current_row as u8)) as char;
+                        let result = if inputs[current_row].trim().is_empty() {
+                            "".to_string()
+                        } else {
+                            match evaluate_and_solve(&inputs[current_row], &variables, current_row) {
+                                Ok(res) => {
+                                    if res.len() <= output_width - 3 {
+                                        res
+                                    } else {
+                                        "Error".to_string()
+                                    }
+                                }
+                                Err(_) => "Error".to_string(),
+                            }
+                        };
+                        queue!(
+                            buffer,
+                            cursor::MoveTo(0, (current_row + 3) as u16),
+                            Print(
+                                format!(
+                                    "{}: [{:>width$}] = [{:<input_width$}]",
+                                    label,
+                                    result,
+                                    inputs[current_row],
+                                    width = output_width,
+                                    input_width = input_width
+                                )
+                            )
+                        )?;
+                        stdout.write_all(&buffer)?;
+                        stdout.flush()?;
+                    }
+                }
+                MouseEventKind::ScrollDown => {
+                    if !is_locked && current_row + 1 < inputs.len() {
+                        current_row += 1;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                MouseEventKind::ScrollUp => {
+                    if !is_locked && current_row > 0 {
+                        current_row -= 1;
+                        current_pos = inputs[current_row].len();
+                    }
+                }
+                _ => {}
+            }
             _ => {}
         }
     };
+
+    disable_raw_mode()?;
+    execute!(stdout, LeaveAlternateScreen, DisableMouseCapture)?;
     Ok(result)
 }
 
@@ -937,16 +954,20 @@ fn save_inputs_to_file(
 
 /// 评估和求解输入中提供的数学表达式或方程
 /// 支持线性方程和带变量替换的一般表达式
-fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Result<String, String> {
+fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>, current_row: usize) -> Result<String, String> {
+    // A-K 区域范围为0到10
+    if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
+        return Ok("0".to_string());
+    }
+
     if input.starts_with("fc.") {
         return Ok("Import from cfg file".to_string());
     }
 
     if input.to_lowercase().starts_with("s:") {
-        // Just return the command for now
         return Ok("Qalculate!".to_string());
     }
-    
+
     let input_without_comment = match input.find('#') {
         Some(pos) => &input[..pos],
         None => input,
@@ -1007,8 +1028,15 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>) -> Resul
             }
         }
     } else if parts.len() == 1 {
-        let expression = replace_variables(parts[0].replace(" ", ""), variables);
-        let expression = expression.replace("/", "*1.0/");
+        let mut expression = replace_variables(parts[0].replace(" ", ""), variables);
+        expression = expression.replace("/", "*1.0/");
+        
+        // 引用 Z 变量
+        if expression.contains("z") {
+            let global_sum = GLOBAL_SUM.lock().unwrap();
+            expression = expression.replace("z", &global_sum.to_string());
+        }
+
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
                 let formatted_result = format_with_thousands_separator(
@@ -1052,11 +1080,11 @@ fn replace_variables(expression: String, variables: &HashMap<String, String>) ->
 }
 
 /// 计算结果列表中有效数值结果的总和和数量
-/// 最多处理前 12 个结果
+/// 最多处理前 11 个结果
 fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     let mut sum = 0.0;
     let mut count = 0;
-    for result in results.iter().take(12) {
+    for result in results.iter().take(11) {
         let cleaned_result = remove_thousands_separator(result);
         match cleaned_result.parse::<f64>() {
             Ok(val) =>{
@@ -1066,6 +1094,15 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
             Err(_) => {}
         }
     }
+
+    // 更新全局变量
+    {
+        let mut global_sum = GLOBAL_SUM.lock().unwrap();
+        let mut global_count = GLOBAL_COUNT.lock().unwrap();
+        *global_sum = sum;
+        *global_count = count;
+    }
+
     (sum, count)
 }
 
