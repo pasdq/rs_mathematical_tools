@@ -302,7 +302,7 @@ fn run_app(
     let heade =
         "                     Result  =  Mathematical Expression                               ";
     let foote =
-        " about | rate | fc.section | clear | new | delete | clone(F8)    https://github.com/pasdq ";
+        " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -660,6 +660,15 @@ fn run_app(
                             undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
                         }
                     }
+		    (KeyCode::Home, KeyEventKind::Press) => {
+                        if !is_locked {
+                            *current_section.write().unwrap() = "0".to_string();
+                            load_section("0", inputs, func_toml_path);
+                            current_pos = 0;
+                            current_row = 0;
+                            clear_undo_stack(&undo_stack); // 清空撤销栈
+                        }
+                    }
                     (KeyCode::F(5), key_event_kind) if
                         (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) ||
                         (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press)
@@ -685,7 +694,7 @@ fn run_app(
                             }
                         }
                     }
-		    (KeyCode::F(8), KeyEventKind::Press) => {
+                    (KeyCode::F(8), KeyEventKind::Press) => {
                         if !is_locked {
                             create_and_load_new_section(
                                 &current_section,
@@ -778,7 +787,40 @@ fn run_app(
                     (KeyCode::Enter, KeyEventKind::Press) => {
                         if !is_locked {
                             let input_command = inputs[current_row].clone().to_lowercase();
-                            if input_command == "new" {
+                            if input_command.starts_with("rename ") {
+                                let new_section_name = input_command
+                                    .split_whitespace()
+                                    .nth(1)
+                                    .unwrap_or("")
+                                    .to_string();
+                                if !new_section_name.is_empty() {
+                                    let current_section_name = current_section
+                                        .read()
+                                        .unwrap()
+                                        .clone();
+                                    if
+                                        rename_section_in_file(
+                                            &current_section_name,
+                                            &new_section_name,
+                                            func_toml_path
+                                        ).is_ok()
+                                    {
+                                        *current_section.write().unwrap() =
+                                            new_section_name.clone();
+                                        load_section(&new_section_name, inputs, func_toml_path);
+                                        current_pos = 0;
+                                        current_row = 0;
+                                    } else {
+                                        inputs[current_row].clear();
+                                        inputs[current_row].push_str("Failed to rename section.");
+                                        current_pos = inputs[current_row].len();
+                                    }
+                                } else {
+                                    inputs[current_row].clear();
+                                    inputs[current_row].push_str("Invalid new section name.");
+                                    current_pos = inputs[current_row].len();
+                                }
+                            } else if input_command == "new" {
                                 create_and_load_new_section(
                                     &current_section,
                                     inputs,
@@ -1575,26 +1617,39 @@ fn create_and_load_new_section(
     clone: bool
 ) -> io::Result<()> {
     let current_section_name = current_section.read().unwrap().clone();
-    let new_section_name = format!(
-        "{}_{}",
-        current_section_name,
-        generate_random_section_name()
-    );
+    let new_section_name = format!("{}_{}", current_section_name, generate_random_section_name());
 
     if clone {
-        clone_section_in_file(
-            &current_section_name,
-            &new_section_name,
-            func_toml_path
-        )?;
+        clone_section_in_file(&current_section_name, &new_section_name, func_toml_path)?;
     } else {
-        add_new_section_to_file(
-            &new_section_name,
-            func_toml_path
-        )?;
+        add_new_section_to_file(&new_section_name, func_toml_path)?;
     }
 
     *current_section.write().unwrap() = new_section_name.clone();
     load_section(&new_section_name, inputs, func_toml_path);
+    Ok(())
+}
+
+/// 重命名 .func.toml 文件中的 section
+fn rename_section_in_file(
+    current_section: &str,
+    new_section: &str,
+    func_toml_path: &Path
+) -> Result<(), io::Error> {
+    let mut value = if func_toml_path.exists() {
+        let content = fs::read_to_string(func_toml_path)?;
+        toml::from_str(&content).unwrap_or(Value::Table(toml::map::Map::new()))
+    } else {
+        Value::Table(toml::map::Map::new())
+    };
+
+    if let Value::Table(ref mut table) = value {
+        if let Some(section_value) = table.remove(current_section) {
+            table.insert(new_section.to_string(), section_value);
+        }
+    }
+
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    fs::write(func_toml_path, toml_string)?;
     Ok(())
 }
