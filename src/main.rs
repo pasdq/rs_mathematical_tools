@@ -130,7 +130,7 @@ fn load_func_commands_from_file(
     if !filename.exists() {
         let initial_content =
             r#"
-[0]
+[home]
 A = ""
 B = ""
 C = ""
@@ -240,7 +240,7 @@ fn main() -> io::Result<()> {
         vec![],
     ));
     let lock_state = Arc::new(RwLock::new(false));
-    let current_section = Arc::new(RwLock::new("0".to_string()));
+    let current_section = Arc::new(RwLock::new("home".to_string()));
 
     let undo_stack = Arc::new(RwLock::new(Vec::new())); // 新增撤销栈
 
@@ -662,8 +662,8 @@ fn run_app(
                     }
 		    (KeyCode::Home, KeyEventKind::Press) => {
                         if !is_locked {
-                            *current_section.write().unwrap() = "0".to_string();
-                            load_section("0", inputs, func_toml_path);
+                            *current_section.write().unwrap() = "home".to_string();
+                            load_section("home", inputs, func_toml_path);
                             current_pos = 0;
                             current_row = 0;
                             clear_undo_stack(&undo_stack); // 清空撤销栈
@@ -835,8 +835,8 @@ fn run_app(
                                     &current_section_name,
                                     &func_toml_path
                                 ).unwrap();
-                                *current_section.write().unwrap() = "0".to_string();
-                                load_section("0", inputs, func_toml_path);
+                                *current_section.write().unwrap() = "home".to_string();
+                                load_section("home", inputs, func_toml_path);
                                 current_pos = 0;
                                 current_row = 0;
                             } else if input_command == "clone" {
@@ -1004,7 +1004,7 @@ fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), 
     if !filename.exists() || fs::metadata(filename)?.len() == 0 {
         let initial_content =
             r#"
-[0]
+[home]
 A = ""
 B = ""
 C = ""
@@ -1033,7 +1033,7 @@ R0 = ""
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     if let Value::Table(ref mut table) = value {
-        if !table.contains_key("0") {
+        if !table.contains_key("home") {
             let mut initial_0_section = toml::map::Map::new();
             initial_0_section.insert("A".to_string(), Value::String("".to_string()));
             initial_0_section.insert("B".to_string(), Value::String("".to_string()));
@@ -1050,7 +1050,7 @@ R0 = ""
             initial_0_section.insert("M".to_string(), Value::String("".to_string()));
             initial_0_section.insert("N".to_string(), Value::String("".to_string()));
 
-            table.insert("0".to_string(), Value::Table(initial_0_section));
+            table.insert("home".to_string(), Value::Table(initial_0_section));
             content = toml
                 ::to_string(&value)
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
@@ -1065,7 +1065,7 @@ R0 = ""
     let mut additional_lines = vec![];
 
     if let Value::Table(table) = value {
-        if let Some(Value::Table(input_table)) = table.get("0") {
+        if let Some(Value::Table(input_table)) = table.get("home") {
             for (key, value) in input_table {
                 if let Value::String(input_string) = value {
                     let index = match key.as_str() {
@@ -1151,7 +1151,7 @@ fn evaluate_and_solve(
 ) -> Result<String, String> {
     // A-K 区域范围为0到10
     if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
-        return Ok("0".to_string());
+        return Ok("home".to_string());
     }
 
     if input.starts_with("fc.") {
