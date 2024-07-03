@@ -1,6 +1,6 @@
 [package]
 name = "rs_mathematical_tools"
-version = "1.2.6"
+version = "1.2.7"
 edition = "2021"
 build = "build.rs"
 
@@ -11,6 +11,7 @@ evalexpr = "11.3.0"
 regex = "1.5"
 toml = "0.8.14"
 lazy_static = "1.4"
+rand = "0.8"
 
 [profile.release]
 opt-level = 'z'          # 优化级别为“z”，这是最高级别的优化
