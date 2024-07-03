@@ -31,10 +31,9 @@ use evalexpr::eval;
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
-use std::fs::{ self };
+use std::fs;
 use std::io::{ self, Write };
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{ Path, PathBuf };
 use std::sync::{ Arc, RwLock };
 use toml::Value;
 
@@ -60,11 +59,7 @@ fn handle_fc_command(
     func_toml_path: &Path
 ) -> bool {
     let key = &command[3..];
-    // 重新加载 .func.toml 文件
-    if
-        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) =
-            load_func_commands_from_file(func_toml_path)
-    {
+    if let Ok((new_func_map, _, _, _)) = load_func_commands_from_file(func_toml_path) {
         *func_map = new_func_map;
     } else {
         eprintln!("Failed to reload .func.toml");
@@ -108,7 +103,6 @@ fn handle_const_command(
     const_map: &HashMap<String, String>,
     current_row: usize
 ) -> bool {
-    // 直接从 const_map 中查找键值
     if let Some(value) = const_map.get(command) {
         inputs[current_row] = value.to_string();
         return true;
@@ -156,19 +150,18 @@ k = "1000.0 # Thousand"
 color = "Green"
 attribute = "Underlined"
 "#;
-
         fs::write(filename, initial_content)?;
     }
 
     let content = fs::read_to_string(filename)?;
     let value: Value = toml
         ::from_str(&content)
-        .map_err(|_|
+        .map_err(|_| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 "- The configuration file .func.toml has a syntax error!\n\n- Please locate it in the working directory and check it,\n- or you can delete it to restore the factory settings.\n"
             )
-        )?;
+        })?;
 
     let mut func_map = HashMap::new();
     let mut const_map = HashMap::new();
@@ -217,7 +210,6 @@ fn main() -> io::Result<()> {
     let func_toml_path = exe_dir.join(".func.toml");
     let backup_toml_path = exe_dir.join(".func.toml.bak");
 
-    // 备份 .func.toml 文件
     if func_toml_path.exists() {
         fs::copy(&func_toml_path, &backup_toml_path)?;
     }
@@ -235,14 +227,13 @@ fn main() -> io::Result<()> {
 
     let args = Args::parse();
     let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
-    let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| (
-        vec!["".to_string(); 14],
-        vec![],
-    ));
+    let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| {
+        (vec!["".to_string(); 14], vec![])
+    });
     let lock_state = Arc::new(RwLock::new(false));
     let current_section = Arc::new(RwLock::new("home".to_string()));
 
-    let undo_stack = Arc::new(RwLock::new(Vec::new())); // 新增撤销栈
+    let undo_stack = Arc::new(RwLock::new(Vec::new()));
 
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
@@ -257,7 +248,7 @@ fn main() -> io::Result<()> {
         custom_color,
         custom_attribute,
         &func_toml_path,
-        Arc::clone(&undo_stack) // 传递撤销栈
+        Arc::clone(&undo_stack)
     );
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -289,7 +280,7 @@ fn run_app(
     custom_color: Option<String>,
     custom_attribute: Option<String>,
     func_toml_path: &Path,
-    undo_stack: Arc<RwLock<Vec<Vec<String>>>> // 添加撤销栈参数
+    undo_stack: Arc<RwLock<Vec<Vec<String>>>>
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut variables = HashMap::new();
@@ -297,12 +288,9 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 57;
     let output_width = 23;
-    let title =
-        " RS Mathematical Tools                                                             V1.2.7 ";
-    let heade =
-        "                     Result  =  Mathematical Expression                               ";
-    let foote =
-        " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
+    let title = " RS Mathematical Tools                                                             V1.2.7 ";
+    let heade = "                     Result  =  Mathematical Expression";
+    let foote = " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -325,7 +313,7 @@ fn run_app(
         "DarkCyan" => Color::DarkCyan,
         "Grey" => Color::Grey,
         "DarkGrey" => Color::DarkGrey,
-        _ => Color::Green, // Fallback color
+        _ => Color::Green,
     };
 
     let tui_attribute = match default_attribute.as_str() {
@@ -346,7 +334,7 @@ fn run_app(
         "NoHidden" => Attribute::NoHidden,
         "CrossedOut" => Attribute::CrossedOut,
         "NotCrossedOut" => Attribute::NotCrossedOut,
-        _ => Attribute::Underlined, // Fallback attribute
+        _ => Attribute::Underlined,
     };
 
     enable_raw_mode()?;
@@ -603,7 +591,7 @@ fn run_app(
                             &mut current_row,
                             &mut current_pos
                         );
-                        clear_undo_stack(&undo_stack); // 清空撤销栈
+                        clear_undo_stack(&undo_stack);
                     }
                     (KeyCode::Right, KeyEventKind::Press) if
                         modifiers.contains(KeyModifiers::CONTROL)
@@ -616,7 +604,7 @@ fn run_app(
                             &mut current_row,
                             &mut current_pos
                         );
-                        clear_undo_stack(&undo_stack); // 清空撤销栈
+                        clear_undo_stack(&undo_stack);
                     }
                     (KeyCode::F(4), KeyEventKind::Press) => {
                         let mut lock_state_guard = lock_state.write().unwrap();
@@ -631,7 +619,7 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态, 清理A-K
+                            push_undo_stack(&undo_stack, &inputs);
                             for input in inputs.iter_mut().take(11) {
                                 input.clear();
                             }
@@ -646,7 +634,7 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                            push_undo_stack(&undo_stack, &inputs);
                             let label = (b'A' + (current_row as u8)) as char;
                             inputs[current_row].clear();
                             variables.remove(&label.to_string());
@@ -660,18 +648,17 @@ fn run_app(
                             undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
                         }
                     }
-		    (KeyCode::Home, KeyEventKind::Press) => {
+                    (KeyCode::Home, KeyEventKind::Press) => {
                         if !is_locked {
                             *current_section.write().unwrap() = "home".to_string();
                             load_section("home", inputs, func_toml_path);
                             current_pos = 0;
                             current_row = 0;
-                            clear_undo_stack(&undo_stack); // 清空撤销栈
+                            clear_undo_stack(&undo_stack);
                         }
                     }
-                    (KeyCode::F(5), key_event_kind) if
-                        (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) ||
-                        (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press)
+                    (KeyCode::Char('s'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         save_inputs_to_file(
                             filename,
@@ -773,14 +760,14 @@ fn run_app(
                     }
                     (KeyCode::Backspace, KeyEventKind::Press) => {
                         if !is_locked && current_pos > 0 {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                            push_undo_stack(&undo_stack, &inputs);
                             inputs[current_row].remove(current_pos - 1);
                             current_pos -= 1;
                         }
                     }
                     (KeyCode::Delete, KeyEventKind::Press) => {
                         if !is_locked && current_pos < inputs[current_row].len() {
-                            push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                            push_undo_stack(&undo_stack, &inputs);
                             inputs[current_row].remove(current_pos);
                         }
                     }
@@ -890,7 +877,6 @@ fn run_app(
                                 }
                                 current_pos = inputs[current_row].len();
                             } else if input_command.starts_with("s:") {
-                                // Handle s: command
                                 let command = &input_command[2..].trim();
                                 match execute_qalc_command(command) {
                                     Ok(result) => {
@@ -900,7 +886,7 @@ fn run_app(
                                         inputs[current_row] = err;
                                     }
                                 }
-                                current_pos = inputs[current_row].len(); // Move the cursor to the end of the updated input
+                                current_pos = inputs[current_row].len();
                             } else {
                                 current_row = (current_row + 1) % inputs.len();
                                 current_pos = inputs[current_row].len();
@@ -909,16 +895,13 @@ fn run_app(
                     }
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
-                            // 新增判断: 如果输入的是 'Z' 或 'z' 且当前行在 A-K 范围内
                             if (c == 'Z' || c == 'z') && current_row <= 10 {
                                 inputs[current_row].clear();
-                                //inputs[current_row].push('0');
                                 inputs[current_row].push_str(
                                     "# Global variable Z is limited to the L-N area only"
                                 );
-                                // 添加注释
                             } else {
-                                push_undo_stack(&undo_stack, &inputs); // 保存当前状态
+                                push_undo_stack(&undo_stack, &inputs);
                                 inputs[current_row].insert(current_pos, c);
                                 current_pos += 1;
                             }
@@ -999,7 +982,6 @@ fn run_app(
 }
 
 /// 从指定文件读取输入数据
-/// 如果文件不存在或为空, 则初始化输入列表和附加行
 fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), io::Error> {
     if !filename.exists() || fs::metadata(filename)?.len() == 0 {
         let initial_content =
@@ -1104,7 +1086,6 @@ R0 = ""
 }
 
 /// 将当前输入数据和附加行的状态保存到指定文件
-/// 将当前输入数据的状态保存到指定文件（不包括附加行）
 fn save_inputs_to_file(
     filename: &Path,
     inputs: &[String],
@@ -1119,7 +1100,6 @@ fn save_inputs_to_file(
     };
 
     if let Value::Table(ref mut table) = value {
-        // Preserve other sections and items in the table
         let mut input_table = table
             .get(section)
             .cloned()
@@ -1143,13 +1123,11 @@ fn save_inputs_to_file(
 }
 
 /// 评估和求解输入中提供的数学表达式或方程
-/// 支持线性方程和带变量替换的一般表达式
 fn evaluate_and_solve(
     input: &str,
     variables: &HashMap<String, String>,
     current_row: usize
 ) -> Result<String, String> {
-    // A-K 区域范围为0到10
     if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
         return Ok("home".to_string());
     }
@@ -1182,7 +1160,7 @@ fn evaluate_and_solve(
                     return Err("Error".to_string());
                 }
             };
-            let _rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
+            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
                 Ok(val) => val.as_number().unwrap_or(0.0),
                 Err(_) => {
                     return Err("Error".to_string());
@@ -1199,7 +1177,7 @@ fn evaluate_and_solve(
                     "Invalid equation: coefficient of x is zero or not a linear equation".to_string()
                 );
             }
-            let result = (_rhs_value - lhs_value) / coefficient;
+            let result = (rhs_value - lhs_value) / coefficient;
             let formatted_result = format_with_thousands_separator(result);
             Ok(formatted_result)
         } else {
@@ -1225,7 +1203,6 @@ fn evaluate_and_solve(
         let mut expression = replace_variables(parts[0].replace(" ", ""), variables);
         expression = expression.replace("/", "*1.0/");
 
-        // 引用 Z 变量
         if expression.contains("z") {
             let global_sum = GLOBAL_SUM.lock().unwrap();
             expression = expression.replace("z", &global_sum.to_string());
@@ -1274,7 +1251,6 @@ fn replace_variables(expression: String, variables: &HashMap<String, String>) ->
 }
 
 /// 计算结果列表中有效数值结果的总和和数量
-/// 最多处理前 11 个结果
 fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     let mut sum = 0.0;
     let mut count = 0;
@@ -1289,7 +1265,6 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
         }
     }
 
-    // 更新全局变量
     {
         let mut global_sum = GLOBAL_SUM.lock().unwrap();
         let mut global_count = GLOBAL_COUNT.lock().unwrap();
@@ -1461,10 +1436,9 @@ fn handle_page_down(
     stdout.flush().unwrap();
 }
 
-/// 外援计算
+/// 执行 Qalculate! 命令
 fn execute_qalc_command(command: &str) -> Result<String, String> {
     let output = if cfg!(target_os = "windows") {
-        // 获取当前可执行文件的路径，并构建qalc.exe的路径
         let exe_path = env::current_exe().unwrap();
         let exe_dir = exe_path.parent().unwrap();
         let command_path = exe_dir.join("qalc/qalc.exe");
@@ -1502,12 +1476,10 @@ fn undo(
     if let Some(last_state) = stack.pop() {
         *inputs = last_state;
 
-        // 更新 current_row 和 current_pos
-        // 找到最后一个非空行
         for (i, input) in inputs.iter().enumerate().rev() {
             if !input.is_empty() {
                 *current_row = i;
-                *current_pos = input.len() - 1;
+                *current_pos = input.len();
                 break;
             }
         }
@@ -1520,7 +1492,7 @@ fn clear_undo_stack(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>) {
     stack.clear();
 }
 
-// 修改生成随机 section 名称的函数
+/// 生成随机 section 名称
 fn generate_random_section_name() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -1567,7 +1539,7 @@ fn add_new_section_to_file(section_name: &str, func_toml_path: &Path) -> Result<
     Ok(())
 }
 
-/// 添加删除 section 的函数
+/// 删除 section
 fn delete_section_from_file(section_name: &str, func_toml_path: &Path) -> Result<(), io::Error> {
     let mut value = if func_toml_path.exists() {
         let content = fs::read_to_string(func_toml_path)?;
@@ -1585,7 +1557,7 @@ fn delete_section_from_file(section_name: &str, func_toml_path: &Path) -> Result
     Ok(())
 }
 
-// 添加新的 clone_section_in_file 函数
+/// 克隆 section
 fn clone_section_in_file(
     source_section: &str,
     target_section: &str,
@@ -1609,7 +1581,7 @@ fn clone_section_in_file(
     Ok(())
 }
 
-/// 提取用于生成新 section 名称并加载该 section
+/// 创建并加载新 section
 fn create_and_load_new_section(
     current_section: &Arc<RwLock<String>>,
     inputs: &mut Vec<String>,
@@ -1630,7 +1602,7 @@ fn create_and_load_new_section(
     Ok(())
 }
 
-/// 重命名 .func.toml 文件中的 section
+/// 重命名 section
 fn rename_section_in_file(
     current_section: &str,
     new_section: &str,
