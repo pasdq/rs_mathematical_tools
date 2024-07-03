@@ -1,41 +1,26 @@
-use std::collections::HashMap;
-use std::fs::{self};
-use std::io::{self, Write};
-use std::path::Path;
-use std::sync::{Arc, RwLock};
-use std::path::PathBuf;
-use regex::Regex;
-use evalexpr::eval;
+use clap::Parser;
 use crossterm::{
     cursor,
     event::{
-        self,
-        DisableMouseCapture,
-        EnableMouseCapture,
-        Event,
-        KeyCode,
-        KeyEvent,
-        KeyModifiers,
-        MouseButton,
-        MouseEvent,
-        MouseEventKind,
-        KeyEventKind,
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+        KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
-    execute,
-    queue,
-    style::{Attribute, SetAttribute, Color, Print, SetForegroundColor, ResetColor},
+    execute, queue,
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
     terminal::{
-        disable_raw_mode,
-        enable_raw_mode,
-        EnterAlternateScreen,
+        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
         LeaveAlternateScreen,
-        Clear,
-        ClearType,
-        size,
     },
 };
-use clap::Parser;
+use evalexpr::eval;
+use regex::Regex;
+use std::collections::HashMap;
 use std::env;
+use std::fs::{self};
+use std::io::{self, Write};
+use std::path::Path;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use toml::Value;
 
 #[macro_use]
@@ -57,11 +42,13 @@ fn handle_fc_command(
     command: &str,
     inputs: &mut Vec<String>,
     func_map: &mut HashMap<String, HashMap<String, String>>,
-    func_toml_path: &Path
+    func_toml_path: &Path,
 ) -> bool {
     let key = &command[3..];
     // 重新加载 .func.toml 文件
-    if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) = load_func_commands_from_file(func_toml_path) {
+    if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) =
+        load_func_commands_from_file(func_toml_path)
+    {
         *func_map = new_func_map;
     } else {
         eprintln!("Failed to reload .func.toml");
@@ -114,11 +101,18 @@ fn handle_const_command(
 }
 
 fn load_func_commands_from_file(
-    filename: &Path
-) -> Result<(HashMap<String, HashMap<String, String>>, HashMap<String, String>, Option<String>, Option<String>), io::Error> {
+    filename: &Path,
+) -> Result<
+    (
+        HashMap<String, HashMap<String, String>>,
+        HashMap<String, String>,
+        Option<String>,
+        Option<String>,
+    ),
+    io::Error,
+> {
     if !filename.exists() {
-        let initial_content =
-            r#"
+        let initial_content = r#"
 [0]
 A = ""
 B = ""
@@ -169,8 +163,12 @@ attribute = "Underlined"
                 }
             } else if key == "TUI" {
                 if let Value::Table(tui_table) = value {
-                    custom_color = tui_table.get("color").and_then(|v| v.as_str().map(String::from));
-                    custom_attribute = tui_table.get("attribute").and_then(|v| v.as_str().map(String::from));
+                    custom_color = tui_table
+                        .get("color")
+                        .and_then(|v| v.as_str().map(String::from));
+                    custom_attribute = tui_table
+                        .get("attribute")
+                        .and_then(|v| v.as_str().map(String::from));
                 }
             } else if let Value::Table(command_table) = value {
                 let mut commands = HashMap::new();
@@ -183,7 +181,10 @@ attribute = "Underlined"
             }
         }
     } else {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, "TOML root is not a table"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "TOML root is not a table",
+        ));
     }
 
     Ok((func_map, const_map, custom_color, custom_attribute))
@@ -194,21 +195,23 @@ fn main() -> io::Result<()> {
     let exe_dir = exe_path.parent().unwrap();
     let func_toml_path = exe_dir.join(".func.toml");
 
-    let (mut func_map, const_map, custom_color, custom_attribute) = match load_func_commands_from_file(&func_toml_path) {
-        Ok(result) => result,
-        Err(e) => {
-            eprintln!("{}", e);
-            wait_for_keypress("- Press any key to exit ...");
-            return Err(e);
-        }
-    };
+    let (mut func_map, const_map, custom_color, custom_attribute) =
+        match load_func_commands_from_file(&func_toml_path) {
+            Ok(result) => result,
+            Err(e) => {
+                eprintln!("{}", e);
+                wait_for_keypress("- Press any key to exit ...");
+                return Err(e);
+            }
+        };
 
     let args = Args::parse();
-    let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
-    let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| (
-        vec!["".to_string(); 14],
-        vec![],
-    ));
+    let filename = args
+        .filename
+        .map(PathBuf::from)
+        .unwrap_or_else(|| exe_dir.join(".func.toml"));
+    let (mut inputs, additional_lines) =
+        read_inputs_from_file(&filename).unwrap_or_else(|_| (vec!["".to_string(); 14], vec![]));
     let lock_state = Arc::new(RwLock::new(false));
     let current_section = Arc::new(RwLock::new("0".to_string()));
 
@@ -227,7 +230,7 @@ fn main() -> io::Result<()> {
         custom_color,
         custom_attribute,
         &func_toml_path,
-        Arc::clone(&undo_stack) // 传递撤销栈
+        Arc::clone(&undo_stack), // 传递撤销栈
     );
     disable_raw_mode()?;
     execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
@@ -259,7 +262,7 @@ fn run_app(
     custom_color: Option<String>,
     custom_attribute: Option<String>,
     func_toml_path: &Path,
-    undo_stack: Arc<RwLock<Vec<Vec<String>>>> // 添加撤销栈参数
+    undo_stack: Arc<RwLock<Vec<Vec<String>>>>, // 添加撤销栈参数
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut variables = HashMap::new();
@@ -268,8 +271,9 @@ fn run_app(
     let input_width = 57;
     let output_width = 23;
     let title = " RS Mathematical Tools                                                             V1.2.6 ";
-    let heade = "                     Result  =  Mathematical Expression                               ";
-    let foote = " About | Rate | fc.section                                       https://github.com/pasdq ";
+    let heade =
+        "                     Result  =  Mathematical Expression                               ";
+    let foote = " About | Rate | fc.section | clear                               https://github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -354,7 +358,11 @@ fn run_app(
             } else {
                 match evaluate_and_solve(input, &variables, i) {
                     Ok(res) => {
-                        if res.len() <= output_width - 3 { res } else { "Error".to_string() }
+                        if res.len() <= output_width - 3 {
+                            res
+                        } else {
+                            "Error".to_string()
+                        }
                     }
                     Err(_) => {
                         if input.starts_with("fc.") {
@@ -370,28 +378,24 @@ fn run_app(
                 if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(
-                            if input.starts_with("fc.") {
-                                Color::Blue
-                            } else {
-                                Color::DarkRed
-                            }
-                        ),
+                        SetForegroundColor(if input.starts_with("fc.") {
+                            Color::Blue
+                        } else {
+                            Color::DarkRed
+                        }),
                         cursor::MoveTo(0, (i + 3) as u16),
-                        Print(
-                            format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                if input.starts_with("fc.") {
-                                    ""
-                                } else {
-                                    result.as_str()
-                                },
-                                input,
-                                width = output_width,
-                                input_width = input_width
-                            )
-                        ),
+                        Print(format!(
+                            "{}: [{:>width$}] = [{:<input_width$}]",
+                            label,
+                            if input.starts_with("fc.") {
+                                ""
+                            } else {
+                                result.as_str()
+                            },
+                            input,
+                            width = output_width,
+                            input_width = input_width
+                        )),
                         ResetColor
                     )?;
                 } else {
@@ -401,16 +405,14 @@ fn run_app(
                             SetForegroundColor(tui_color),
                             SetAttribute(tui_attribute),
                             cursor::MoveTo(0, (i + 3) as u16),
-                            Print(
-                                format!(
-                                    "{}: [{:>width$}] = [{:<input_width$}]",
-                                    label,
-                                    result,
-                                    input,
-                                    width = output_width,
-                                    input_width = input_width
-                                )
-                            ),
+                            Print(format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                result,
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )),
                             ResetColor
                         )?;
                     } else {
@@ -418,16 +420,14 @@ fn run_app(
                             buffer,
                             SetForegroundColor(if i >= 11 { Color::Blue } else { tui_color }),
                             cursor::MoveTo(0, (i + 3) as u16),
-                            Print(
-                                format!(
-                                    "{}: [{:>width$}] = [{:<input_width$}]",
-                                    label,
-                                    result,
-                                    input,
-                                    width = output_width,
-                                    input_width = input_width
-                                )
-                            ),
+                            Print(format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                result,
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )),
                             ResetColor
                         )?;
                     }
@@ -436,28 +436,24 @@ fn run_app(
                 if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(
-                            if input.starts_with("fc.") {
-                                Color::Blue
-                            } else {
-                                Color::DarkRed
-                            }
-                        ),
+                        SetForegroundColor(if input.starts_with("fc.") {
+                            Color::Blue
+                        } else {
+                            Color::DarkRed
+                        }),
                         cursor::MoveTo(0, (i + 3) as u16),
-                        Print(
-                            format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                if input.starts_with("fc.") {
-                                    ""
-                                } else {
-                                    result.as_str()
-                                },
-                                input,
-                                width = output_width,
-                                input_width = input_width
-                            )
-                        ),
+                        Print(format!(
+                            "{}: [{:>width$}] = [{:<input_width$}]",
+                            label,
+                            if input.starts_with("fc.") {
+                                ""
+                            } else {
+                                result.as_str()
+                            },
+                            input,
+                            width = output_width,
+                            input_width = input_width
+                        )),
                         ResetColor
                     )?;
                 } else {
@@ -465,16 +461,14 @@ fn run_app(
                         buffer,
                         SetForegroundColor(if i >= 11 { Color::Blue } else { Color::Reset }),
                         cursor::MoveTo(0, (i + 3) as u16),
-                        Print(
-                            format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                result,
-                                input,
-                                width = output_width,
-                                input_width = input_width
-                            )
-                        ),
+                        Print(format!(
+                            "{}: [{:>width$}] = [{:<input_width$}]",
+                            label,
+                            result,
+                            input,
+                            width = output_width,
+                            input_width = input_width
+                        )),
                         ResetColor
                     )?;
                 }
@@ -489,7 +483,11 @@ fn run_app(
         }
 
         let (sum, valid_count) = calculate_sum_and_count(&results);
-        let average = if valid_count > 0 { sum / (valid_count as f64) } else { 0.0 };
+        let average = if valid_count > 0 {
+            sum / (valid_count as f64)
+        } else {
+            0.0
+        };
         queue!(
             buffer,
             cursor::MoveTo(0, (inputs.len() + 4) as u16),
@@ -498,19 +496,26 @@ fn run_app(
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
             cursor::MoveTo(13, (inputs.len() + 4) as u16),
-            Print(format!("(A - K) Sum = Z = {}", format_with_thousands_separator(sum))),
+            Print(format!(
+                "(A - K) Sum = Z = {}",
+                format_with_thousands_separator(sum)
+            )),
             cursor::MoveTo(13, (inputs.len() + 5) as u16),
-            Print(format!("(A - K) Average = {}", format_with_thousands_separator(average))),
+            Print(format!(
+                "(A - K) Average = {}",
+                format_with_thousands_separator(average)
+            )),
             cursor::MoveTo(0, (inputs.len() + 8) as u16),
             ResetColor,
-	                SetAttribute(Attribute::Reverse),
+            SetAttribute(Attribute::Reverse),
             Print(foote),
             ResetColor,
             cursor::MoveTo(22, 20),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
-            Print(
-                format!("Status = {} (F4 Status Switch)", if is_locked { "Locked" } else { "Opened" })
-            ),
+            Print(format!(
+                "Status = {} (F4 Status Switch)",
+                if is_locked { "Locked" } else { "Opened" }
+            )),
             ResetColor,
             cursor::MoveTo(0, (inputs.len() + 9) as u16),
             ResetColor
@@ -526,11 +531,19 @@ fn run_app(
             )?;
             show_saved_message = false;
         } else {
-            queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?;
+            queue!(
+                buffer,
+                cursor::MoveTo(0, 17),
+                Print(" ".repeat(term_width as usize))
+            )?;
         }
 
         for (i, line) in additional_lines.iter().enumerate() {
-            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 10 + i) as u16), Print(line))?;
+            queue!(
+                buffer,
+                cursor::MoveTo(0, (inputs.len() + 10 + i) as u16),
+                Print(line)
+            )?;
         }
 
         if is_locked {
@@ -548,16 +561,41 @@ fn run_app(
         stdout.flush()?;
 
         match event::read()? {
-            Event::Key(KeyEvent { code, modifiers, kind, .. }) => match (code, kind) {
-                (KeyCode::Char('c'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+            Event::Key(KeyEvent {
+                code,
+                modifiers,
+                kind,
+                ..
+            }) => match (code, kind) {
+                (KeyCode::Char('c'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     break;
                 }
-                (KeyCode::Left, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                    handle_page_up(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                (KeyCode::Left, KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    handle_page_up(
+                        current_section.clone(),
+                        func_map,
+                        inputs,
+                        func_toml_path,
+                        &mut current_row,
+                        &mut current_pos,
+                    );
                     clear_undo_stack(&undo_stack); // 清空撤销栈
                 }
-                (KeyCode::Right, KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
-                    handle_page_down(current_section.clone(), func_map, inputs, func_toml_path, &mut current_row, &mut current_pos);
+                (KeyCode::Right, KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    handle_page_down(
+                        current_section.clone(),
+                        func_map,
+                        inputs,
+                        func_toml_path,
+                        &mut current_row,
+                        &mut current_pos,
+                    );
                     clear_undo_stack(&undo_stack); // 清空撤销栈
                 }
                 (KeyCode::F(4), KeyEventKind::Press) => {
@@ -569,7 +607,9 @@ fn run_app(
                         queue!(stdout, cursor::Show)?;
                     }
                 }
-                (KeyCode::Char('u'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('u'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         push_undo_stack(&undo_stack, &inputs); // 保存当前状态, 清理A-K
                         for input in inputs.iter_mut().take(11) {
@@ -582,7 +622,9 @@ fn run_app(
                         current_row = 0;
                     }
                 }
-                (KeyCode::Char('l'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('l'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         push_undo_stack(&undo_stack, &inputs); // 保存当前状态
                         let label = (b'A' + (current_row as u8)) as char;
@@ -591,15 +633,30 @@ fn run_app(
                         current_pos = 0;
                     }
                 }
-                (KeyCode::Char('z'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('z'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
                     }
                 }
-                (KeyCode::F(5), key_event_kind) if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) => {
-                    save_inputs_to_file(filename, inputs, additional_lines, &current_section.read().unwrap())?;
+                (KeyCode::F(5), key_event_kind)
+                    if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release)
+                        || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) =>
+                {
+                    save_inputs_to_file(
+                        filename,
+                        inputs,
+                        additional_lines,
+                        &current_section.read().unwrap(),
+                    )?;
                     show_saved_message = true;
-                    queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
+                    queue!(
+                        buffer,
+                        Clear(ClearType::All),
+                        cursor::MoveTo(0, 0),
+                        Print(title)
+                    )?;
                     variables.clear();
                     for (i, input) in inputs.iter().enumerate() {
                         let label = (b'A' + (i as u8)) as char;
@@ -613,13 +670,17 @@ fn run_app(
                         }
                     }
                 }
-                (KeyCode::Char('t'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('t'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         current_row = 0;
                         current_pos = inputs[current_row].len();
                     }
                 }
-                (KeyCode::Char('d'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('d'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         if !inputs[current_row].trim().is_empty() {
                             if current_row < inputs.len() - 1 {
@@ -630,18 +691,24 @@ fn run_app(
                         }
                     }
                 }
-                (KeyCode::Char('a'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('a'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         current_pos = 0;
                     }
                 }
-                (KeyCode::Char('b'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('b'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         current_row = inputs.len() - 1;
                         current_pos = inputs[current_row].len();
                     }
                 }
-                (KeyCode::Char('e'), KeyEventKind::Press) if modifiers.contains(KeyModifiers::CONTROL) => {
+                (KeyCode::Char('e'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
                     if !is_locked {
                         current_pos = inputs[current_row].len();
                     }
@@ -684,14 +751,22 @@ fn run_app(
                 (KeyCode::Enter, KeyEventKind::Press) => {
                     if !is_locked {
                         let input_command = inputs[current_row].clone().to_lowercase();
-                        if input_command.starts_with("fc.") && handle_fc_command(&input_command, inputs, func_map, func_toml_path) {
+                        if input_command.starts_with("fc.")
+                            && handle_fc_command(&input_command, inputs, func_map, func_toml_path)
+                        {
                             current_pos = inputs[current_row].len();
                             *current_section.write().unwrap() = input_command[3..].to_string();
-                        } else if handle_const_command(&input_command, inputs, const_map, current_row) {
+                        } else if handle_const_command(
+                            &input_command,
+                            inputs,
+                            const_map,
+                            current_row,
+                        ) {
                             current_pos = inputs[current_row].len();
                         } else if input_command == "clear" || input_command == "cls" {
                             if !is_locked {
-                                for input in inputs.iter_mut().take(13) {
+							    // 清除所有输入框
+                                for input in inputs.iter_mut().take(14) {
                                     input.clear();
                                 }
                                 current_pos = 0;
@@ -720,7 +795,7 @@ fn run_app(
                             current_pos = inputs[current_row].len();
                         } else if input_command.starts_with("s:") {
                             // Handle s: command
-                                                        let command = &input_command[2..].trim();
+                            let command = &input_command[2..].trim();
                             match execute_qalc_command(command) {
                                 Ok(result) => {
                                     inputs[current_row] = result;
@@ -742,7 +817,9 @@ fn run_app(
                         if (c == 'Z' || c == 'z') && current_row <= 10 {
                             inputs[current_row].clear();
                             //inputs[current_row].push('0');
-                            inputs[current_row].push_str("# Global variable Z is limited to the L-N area only"); // 添加注释
+                            inputs[current_row]
+                                .push_str("# Global variable Z is limited to the L-N area only");
+                        // 添加注释
                         } else {
                             push_undo_stack(&undo_stack, &inputs); // 保存当前状态
                             inputs[current_row].insert(current_pos, c);
@@ -751,8 +828,10 @@ fn run_app(
                     }
                 }
                 _ => {}
-            }
-            Event::Mouse(MouseEvent { kind, column, row, .. }) => match kind {
+            },
+            Event::Mouse(MouseEvent {
+                kind, column, row, ..
+            }) => match kind {
                 MouseEventKind::Down(MouseButton::Left) => {
                     let clicked_row = (row as usize) - 3;
                     if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
@@ -765,7 +844,8 @@ fn run_app(
                         let result = if inputs[current_row].trim().is_empty() {
                             "".to_string()
                         } else {
-                            match evaluate_and_solve(&inputs[current_row], &variables, current_row) {
+                            match evaluate_and_solve(&inputs[current_row], &variables, current_row)
+                            {
                                 Ok(res) => {
                                     if res.len() <= output_width - 3 {
                                         res
@@ -779,16 +859,14 @@ fn run_app(
                         queue!(
                             buffer,
                             cursor::MoveTo(0, (current_row + 3) as u16),
-                            Print(
-                                format!(
-                                    "{}: [{:>width$}] = [{:<input_width$}]",
-                                    label,
-                                    result,
-                                    inputs[current_row],
-                                    width = output_width,
-                                    input_width = input_width
-                                )
-                            )
+                            Print(format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                result,
+                                inputs[current_row],
+                                width = output_width,
+                                input_width = input_width
+                            ))
                         )?;
                         stdout.write_all(&buffer)?;
                         stdout.flush()?;
@@ -807,7 +885,7 @@ fn run_app(
                     }
                 }
                 _ => {}
-            }
+            },
             _ => {}
         }
     };
@@ -821,8 +899,7 @@ fn run_app(
 /// 如果文件不存在或为空, 则初始化输入列表和附加行
 fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), io::Error> {
     if (!filename.exists()) || fs::metadata(filename)?.len() == 0 {
-        let initial_content =
-            r#"
+        let initial_content = r#"
 [0]
 A = ""
 B = ""
@@ -845,9 +922,10 @@ R0 = ""
         fs::write(filename, initial_content)?;
         return Ok((vec!["".to_string(); 14], vec![]));
     }
-    
+
     let mut content = fs::read_to_string(filename)?;
-    let mut value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let mut value: Value = toml::from_str(&content)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     if let Value::Table(ref mut table) = value {
         if !table.contains_key("0") {
@@ -868,12 +946,14 @@ R0 = ""
             initial_0_section.insert("N".to_string(), Value::String("".to_string()));
 
             table.insert("0".to_string(), Value::Table(initial_0_section));
-            content = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            content = toml::to_string(&value)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
             fs::write(filename, content.clone())?;
         }
     }
 
-    let value: Value = toml::from_str(&content).map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let value: Value = toml::from_str(&content)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let mut inputs = vec!["".to_string(); 14];
     let mut additional_lines = vec![];
 
@@ -922,7 +1002,7 @@ fn save_inputs_to_file(
     filename: &Path,
     inputs: &[String],
     _additional_lines: &[String],
-    section: &str
+    section: &str,
 ) -> Result<(), io::Error> {
     let mut value = if filename.exists() {
         let content = fs::read_to_string(filename)?;
@@ -933,7 +1013,10 @@ fn save_inputs_to_file(
 
     if let Value::Table(ref mut table) = value {
         // Preserve other sections and items in the table
-        let mut input_table = table.get(section).cloned().unwrap_or(Value::Table(toml::map::Map::new()));
+        let mut input_table = table
+            .get(section)
+            .cloned()
+            .unwrap_or(Value::Table(toml::map::Map::new()));
         if let Value::Table(ref mut input_table) = input_table {
             for (i, input) in inputs.iter().enumerate() {
                 let label = (b'A' + (i as u8)) as char;
@@ -947,14 +1030,19 @@ fn save_inputs_to_file(
         table.insert(section.to_string(), input_table);
     }
 
-    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string =
+        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(filename, toml_string)?;
     Ok(())
 }
 
 /// 评估和求解输入中提供的数学表达式或方程
 /// 支持线性方程和带变量替换的一般表达式
-fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>, current_row: usize) -> Result<String, String> {
+fn evaluate_and_solve(
+    input: &str,
+    variables: &HashMap<String, String>,
+    current_row: usize,
+) -> Result<String, String> {
     // A-K 区域范围为0到10
     if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
         return Ok("0".to_string());
@@ -1002,7 +1090,8 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>, current_
             };
             if coefficient == 0.0 {
                 return Err(
-                    "Invalid equation: coefficient of x is zero or not a linear equation".to_string()
+                    "Invalid equation: coefficient of x is zero or not a linear equation"
+                        .to_string(),
                 );
             }
             let result = (_rhs_value - lhs_value) / coefficient;
@@ -1030,7 +1119,7 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>, current_
     } else if parts.len() == 1 {
         let mut expression = replace_variables(parts[0].replace(" ", ""), variables);
         expression = expression.replace("/", "*1.0/");
-        
+
         // 引用 Z 变量
         if expression.contains("z") {
             let global_sum = GLOBAL_SUM.lock().unwrap();
@@ -1039,9 +1128,8 @@ fn evaluate_and_solve(input: &str, variables: &HashMap<String, String>, current_
 
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
-                let formatted_result = format_with_thousands_separator(
-                    result.as_number().unwrap_or(0.0)
-                );
+                let formatted_result =
+                    format_with_thousands_separator(result.as_number().unwrap_or(0.0));
                 Ok(formatted_result)
             }
             Err(_) => Err("Invalid mathematical expression.".to_string()),
@@ -1087,7 +1175,7 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     for result in results.iter().take(11) {
         let cleaned_result = remove_thousands_separator(result);
         match cleaned_result.parse::<f64>() {
-            Ok(val) =>{
+            Ok(val) => {
                 sum += val;
                 count += 1;
             }
@@ -1171,7 +1259,11 @@ fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) 
 }
 
 /// 循环切换 section
-fn get_next_section(func_map: &HashMap<String, HashMap<String, String>>, current_section: &str, reverse: bool) -> String {
+fn get_next_section(
+    func_map: &HashMap<String, HashMap<String, String>>,
+    current_section: &str,
+    reverse: bool,
+) -> String {
     let mut keys: Vec<String> = func_map.keys().cloned().collect();
     keys.retain(|k| k != "tui" && k != "remarks" && k != "const");
     keys.sort();
@@ -1230,7 +1322,7 @@ fn handle_page_down(
     };
     *current_section.write().unwrap() = new_section.clone();
     load_section(&new_section, inputs, func_toml_path);
-    
+
     *current_row = 0;
     *current_pos = 0;
     let mut stdout = io::stdout();
@@ -1275,7 +1367,12 @@ fn push_undo_stack(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>, inputs: &[String]
     }
 }
 
-fn undo(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>, inputs: &mut Vec<String>, current_row: &mut usize, current_pos: &mut usize) {
+fn undo(
+    undo_stack: &Arc<RwLock<Vec<Vec<String>>>>,
+    inputs: &mut Vec<String>,
+    current_row: &mut usize,
+    current_pos: &mut usize,
+) {
     let mut stack = undo_stack.write().unwrap();
     if let Some(last_state) = stack.pop() {
         *inputs = last_state;
@@ -1285,7 +1382,7 @@ fn undo(undo_stack: &Arc<RwLock<Vec<Vec<String>>>>, inputs: &mut Vec<String>, cu
         for (i, input) in inputs.iter().enumerate().rev() {
             if !input.is_empty() {
                 *current_row = i;
-				*current_pos = input.len() - 1;
+                *current_pos = input.len() - 1;
                 break;
             }
         }
