@@ -67,7 +67,7 @@ fn handle_fc_command(
     }
 
     if let Some(commands) = func_map.get(key) {
-        for input in inputs.iter_mut().take(13) {
+        for input in inputs.iter_mut().take(14) {
             input.clear();
         }
         for (input_key, input_value) in commands {
@@ -288,9 +288,12 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 57;
     let output_width = 23;
-    let title = " RS Mathematical Tools                                                             V1.2.7 ";
-    let heade = "                     Result  =  Mathematical Expression";
-    let foote = " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
+    let title =
+        " RS Mathematical Tools                                                             V1.2.7 ";
+    let heade =
+        "                     Result  =  Mathematical Expression                               ";
+    let foote =
+        " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -580,6 +583,68 @@ fn run_app(
                     => {
                         break;
                     }
+
+                    (KeyCode::PageUp, KeyEventKind::Press) => {
+                        if !is_locked {
+                            let input_text = &mut inputs[current_row];
+                            let (number_part, comment_part) = if
+                                let Some(pos) = input_text.find('#')
+                            {
+                                input_text.split_at(pos)
+                            } else {
+                                (input_text.as_str(), "")
+                            };
+
+                            if let Ok(current_value) = number_part.trim().parse::<f64>() {
+                                let step = 0.1;
+                                let new_value = current_value + step;
+                                let formatted_value = format!("{:.4}", new_value);
+                                let spaces = " ".repeat(
+                                    number_part.len() - number_part.trim_end().len()
+                                );
+                                inputs[current_row] = format!(
+                                    "{}{}{}",
+                                    formatted_value,
+                                    spaces,
+                                    comment_part
+                                );
+                            } else if number_part.trim().is_empty() {
+                                inputs[current_row] = format!("0.1000{}", comment_part);
+                            }
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::PageDown, KeyEventKind::Press) => {
+                        if !is_locked {
+                            let input_text = &mut inputs[current_row];
+                            let (number_part, comment_part) = if
+                                let Some(pos) = input_text.find('#')
+                            {
+                                input_text.split_at(pos)
+                            } else {
+                                (input_text.as_str(), "")
+                            };
+
+                            if let Ok(current_value) = number_part.trim().parse::<f64>() {
+                                let step = 0.1;
+                                let new_value = (current_value - step).max(0.0);
+                                let formatted_value = format!("{:.4}", new_value);
+                                let spaces = " ".repeat(
+                                    number_part.len() - number_part.trim_end().len()
+                                );
+                                inputs[current_row] = format!(
+                                    "{}{}{}",
+                                    formatted_value,
+                                    spaces,
+                                    comment_part
+                                );
+                            } else if number_part.trim().is_empty() {
+                                inputs[current_row] = format!("0.0000{}", comment_part);
+                            }
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+
                     (KeyCode::Left, KeyEventKind::Press) if
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
@@ -1310,7 +1375,7 @@ fn remove_thousands_separator(value: &str) -> String {
 fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) {
     if let Ok((func_map, _, _, _)) = load_func_commands_from_file(func_toml_path) {
         if let Some(commands) = func_map.get(section) {
-            for input in inputs.iter_mut().take(13) {
+            for input in inputs.iter_mut().take(14) {
                 input.clear();
             }
             for (input_key, input_value) in commands {
