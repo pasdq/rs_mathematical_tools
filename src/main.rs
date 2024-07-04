@@ -303,7 +303,7 @@ fn run_app(
     let heade =
         "                     Result  =  Mathematical Expression                               ";
     let foote =
-        " about | rate | fc.sec | clear | new | delete | clone | rename           github.com/pasdq ";
+        " about | rate | fc:sec | clear | new | delete | clone | rename           github.com/pasdq ";
     let saved = "                                Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -391,7 +391,7 @@ fn run_app(
                         if res.len() <= output_width - 3 { res } else { "Error".to_string() }
                     }
                     Err(_) => {
-                        if input.starts_with("fc.") {
+                        if input.starts_with("fc:") {
                             "Import from cfg file".to_string()
                         } else {
                             "Error".to_string()
@@ -401,11 +401,11 @@ fn run_app(
             };
 
             if i == current_row {
-                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
+                if result == "Error" || (input.starts_with("fc:") && result.is_empty()) {
                     queue!(
                         buffer,
                         SetForegroundColor(
-                            if input.starts_with("fc.") {
+                            if input.starts_with("fc:") {
                                 Color::Blue
                             } else {
                                 Color::DarkRed
@@ -416,7 +416,7 @@ fn run_app(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
                                 label,
-                                if input.starts_with("fc.") {
+                                if input.starts_with("fc:") {
                                     ""
                                 } else {
                                     result.as_str()
@@ -467,11 +467,11 @@ fn run_app(
                     }
                 }
             } else {
-                if result == "Error" || (input.starts_with("fc.") && result.is_empty()) {
+                if result == "Error" || (input.starts_with("fc:") && result.is_empty()) {
                     queue!(
                         buffer,
                         SetForegroundColor(
-                            if input.starts_with("fc.") {
+                            if input.starts_with("fc:") {
                                 Color::Blue
                             } else {
                                 Color::DarkRed
@@ -482,7 +482,7 @@ fn run_app(
                             format!(
                                 "{}: [{:>width$}] = [{:<input_width$}]",
                                 label,
-                                if input.starts_with("fc.") {
+                                if input.starts_with("fc:") {
                                     ""
                                 } else {
                                     result.as_str()
@@ -618,7 +618,7 @@ fn run_app(
                                     comment_part
                                 );
                             } else if number_part.trim().is_empty() {
-								// 保留三位小数
+                                // 保留三位小数
                                 inputs[current_row] = format!("{:.3}{}", step, comment_part);
                             }
                             current_pos = inputs[current_row].len();
@@ -637,7 +637,7 @@ fn run_app(
 
                             if let Ok(current_value) = number_part.trim().parse::<f64>() {
                                 let new_value = (current_value - step).max(0.0);
-								// 保留三位小数
+                                // 保留三位小数
                                 let formatted_value = format!("{:.3}", new_value);
                                 let spaces = " ".repeat(
                                     number_part.len() - number_part.trim_end().len()
@@ -681,6 +681,22 @@ fn run_app(
                         );
                         clear_undo_stack(&undo_stack);
                     }
+
+                    (KeyCode::Char('g'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !inputs[current_row].trim().is_empty() {
+                            for i in 0..inputs.len() {
+                                let next_index = (current_row + i) % inputs.len();
+                                if inputs[next_index].trim().is_empty() {
+                                    current_row = next_index;
+                                    current_pos = 0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     (KeyCode::F(4), KeyEventKind::Press) => {
                         let mut lock_state_guard = lock_state.write().unwrap();
                         *lock_state_guard = !*lock_state_guard;
@@ -911,7 +927,7 @@ fn run_app(
                                 current_pos = 0;
                                 current_row = 0;
                             } else if
-                                input_command.starts_with("fc.") &&
+                                input_command.starts_with("fc:") &&
                                 handle_fc_command(&input_command, inputs, func_map, func_toml_path)
                             {
                                 current_pos = inputs[current_row].len();
@@ -1207,7 +1223,7 @@ fn evaluate_and_solve(
         return Ok("home".to_string());
     }
 
-    if input.starts_with("fc.") {
+    if input.starts_with("fc:") {
         return Ok("Import from cfg file".to_string());
     }
 
