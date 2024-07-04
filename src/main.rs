@@ -59,7 +59,7 @@ fn handle_fc_command(
     func_toml_path: &Path
 ) -> bool {
     let key = &command[3..];
-    if let Ok((new_func_map, _, _, _)) = load_func_commands_from_file(func_toml_path) {
+    if let Ok((new_func_map, _, _, _, _)) = load_func_commands_from_file(func_toml_path) {
         *func_map = new_func_map;
     } else {
         eprintln!("Failed to reload .func.toml");
@@ -110,14 +110,13 @@ fn handle_const_command(
     false
 }
 
-fn load_func_commands_from_file(
-    filename: &Path
-) -> Result<
+fn load_func_commands_from_file(filename: &Path) -> Result<
     (
         HashMap<String, HashMap<String, String>>,
         HashMap<String, String>,
         Option<String>,
         Option<String>,
+        f64, // 改变返回值类型
     ),
     io::Error
 > {
@@ -149,6 +148,7 @@ k = "1000.0 # Thousand"
 [TUI]
 color = "Green"
 attribute = "Underlined"
+step = "0.1"
 "#;
         fs::write(filename, initial_content)?;
     }
@@ -167,6 +167,7 @@ attribute = "Underlined"
     let mut const_map = HashMap::new();
     let mut custom_color = None;
     let mut custom_attribute = None;
+    let mut step = 0.1; // 默认值为0.1
 
     if let Value::Table(table) = value {
         for (key, value) in table {
@@ -186,6 +187,13 @@ attribute = "Underlined"
                     custom_attribute = tui_table
                         .get("attribute")
                         .and_then(|v| v.as_str().map(String::from));
+                    if
+                        let Some(step_value) = tui_table
+                            .get("step")
+                            .and_then(|v| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+                    {
+                        step = step_value; // 使用自定义的step值
+                    }
                 }
             } else if let Value::Table(command_table) = value {
                 let mut commands = HashMap::new();
@@ -201,7 +209,7 @@ attribute = "Underlined"
         return Err(io::Error::new(io::ErrorKind::InvalidData, "TOML root is not a table"));
     }
 
-    Ok((func_map, const_map, custom_color, custom_attribute))
+    Ok((func_map, const_map, custom_color, custom_attribute, step))
 }
 
 fn main() -> io::Result<()> {
@@ -214,7 +222,7 @@ fn main() -> io::Result<()> {
         fs::copy(&func_toml_path, &backup_toml_path)?;
     }
 
-    let (mut func_map, const_map, custom_color, custom_attribute) = match
+    let (mut func_map, const_map, custom_color, custom_attribute, step) = match
         load_func_commands_from_file(&func_toml_path)
     {
         Ok(result) => result,
@@ -247,6 +255,7 @@ fn main() -> io::Result<()> {
         &const_map,
         custom_color,
         custom_attribute,
+        step, // 传递step值
         &func_toml_path,
         Arc::clone(&undo_stack)
     );
@@ -279,6 +288,7 @@ fn run_app(
     const_map: &HashMap<String, String>,
     custom_color: Option<String>,
     custom_attribute: Option<String>,
+    step: f64,
     func_toml_path: &Path,
     undo_stack: Arc<RwLock<Vec<Vec<String>>>>
 ) -> io::Result<()> {
@@ -596,7 +606,6 @@ fn run_app(
                             };
 
                             if let Ok(current_value) = number_part.trim().parse::<f64>() {
-                                let step = 0.1;
                                 let new_value = current_value + step;
                                 let formatted_value = format!("{:.4}", new_value);
                                 let spaces = " ".repeat(
@@ -609,7 +618,7 @@ fn run_app(
                                     comment_part
                                 );
                             } else if number_part.trim().is_empty() {
-                                inputs[current_row] = format!("0.1000{}", comment_part);
+                                inputs[current_row] = format!("{:.4}{}", step, comment_part);
                             }
                             current_pos = inputs[current_row].len();
                         }
@@ -626,7 +635,6 @@ fn run_app(
                             };
 
                             if let Ok(current_value) = number_part.trim().parse::<f64>() {
-                                let step = 0.1;
                                 let new_value = (current_value - step).max(0.0);
                                 let formatted_value = format!("{:.4}", new_value);
                                 let spaces = " ".repeat(
@@ -1373,7 +1381,7 @@ fn remove_thousands_separator(value: &str) -> String {
 
 /// 循环切换 section
 fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) {
-    if let Ok((func_map, _, _, _)) = load_func_commands_from_file(func_toml_path) {
+    if let Ok((func_map, _, _, _, _)) = load_func_commands_from_file(func_toml_path) {
         if let Some(commands) = func_map.get(section) {
             for input in inputs.iter_mut().take(14) {
                 input.clear();
@@ -1446,7 +1454,7 @@ fn handle_page_up(
 ) {
     // 重新加载 .func.toml 文件
     if
-        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) =
+        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
             load_func_commands_from_file(func_toml_path)
     {
         *func_map = new_func_map;
@@ -1479,7 +1487,7 @@ fn handle_page_down(
 ) {
     // 重新加载 .func.toml 文件
     if
-        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute)) =
+        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
             load_func_commands_from_file(func_toml_path)
     {
         *func_map = new_func_map;
