@@ -607,7 +607,7 @@ fn run_app(
 
                             if let Ok(current_value) = number_part.trim().parse::<f64>() {
                                 let new_value = current_value + step;
-                                let formatted_value = format!("{:.4}", new_value);
+                                let formatted_value = format!("{:.3}", new_value);
                                 let spaces = " ".repeat(
                                     number_part.len() - number_part.trim_end().len()
                                 );
@@ -618,7 +618,8 @@ fn run_app(
                                     comment_part
                                 );
                             } else if number_part.trim().is_empty() {
-                                inputs[current_row] = format!("{:.4}{}", step, comment_part);
+								// 保留三位小数
+                                inputs[current_row] = format!("{:.3}{}", step, comment_part);
                             }
                             current_pos = inputs[current_row].len();
                         }
@@ -636,7 +637,8 @@ fn run_app(
 
                             if let Ok(current_value) = number_part.trim().parse::<f64>() {
                                 let new_value = (current_value - step).max(0.0);
-                                let formatted_value = format!("{:.4}", new_value);
+								// 保留三位小数
+                                let formatted_value = format!("{:.3}", new_value);
                                 let spaces = " ".repeat(
                                     number_part.len() - number_part.trim_end().len()
                                 );
@@ -647,7 +649,7 @@ fn run_app(
                                     comment_part
                                 );
                             } else if number_part.trim().is_empty() {
-                                inputs[current_row] = format!("0.0000{}", comment_part);
+                                inputs[current_row] = format!("0.000{}", comment_part);
                             }
                             current_pos = inputs[current_row].len();
                         }
