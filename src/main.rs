@@ -865,6 +865,10 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
+                            // 先格式化当前输入框内容
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+
+                            // 如果当前行不在最后一行，则将当前行内容复制到下一行并跳转到下一行
                             if current_row < inputs.len() - 1 {
                                 inputs[current_row + 1] = inputs[current_row].clone();
                                 current_row += 1;
@@ -875,7 +879,8 @@ fn run_app(
                     (KeyCode::Char('a'), KeyEventKind::Press) if
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
-                        if !is_locked {
+                        if !is_locked && current_pos > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_pos = 0;
                         }
                     }
@@ -883,6 +888,7 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_row = inputs.len() - 1;
                             current_pos = inputs[current_row].len();
                         }
@@ -891,17 +897,20 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_pos = inputs[current_row].len();
                         }
                     }
                     (KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
                         if !is_locked && current_row < inputs.len() - 1 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_row += 1;
                             current_pos = inputs[current_row].len();
                         }
                     }
                     (KeyCode::Up, KeyEventKind::Press) => {
                         if !is_locked && current_row > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_row -= 1;
                             current_pos = inputs[current_row].len();
                         }
@@ -931,6 +940,7 @@ fn run_app(
                     }
                     (KeyCode::Enter, KeyEventKind::Press) => {
                         if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             let input_command = inputs[current_row].clone().to_lowercase();
                             if input_command.starts_with("rename ") {
                                 let new_section_name = input_command
@@ -1006,7 +1016,6 @@ fn run_app(
                             } else if input_command == "clear" || input_command == "cls" {
                                 if !is_locked {
                                     for input in inputs.iter_mut().take(20) {
-                                        // 修改此处为20
                                         input.clear();
                                     }
                                     current_pos = 0;
@@ -1052,6 +1061,7 @@ fn run_app(
                             }
                         }
                     }
+
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
                             if (c == 'Z' || c == 'z') && current_row <= 16 {
@@ -1072,8 +1082,9 @@ fn run_app(
             Event::Mouse(MouseEvent { kind, column, row, .. }) =>
                 match kind {
                     MouseEventKind::Down(MouseButton::Left) => {
-                        let clicked_row = (row as usize) - 3;
                         if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            let clicked_row = (row as usize) - 3;
                             current_row = clicked_row;
                             current_pos = (column as usize) - (output_width + 9);
                             if current_pos > inputs[current_row].len() {
@@ -1120,12 +1131,14 @@ fn run_app(
                     }
                     MouseEventKind::ScrollDown => {
                         if !is_locked && current_row + 1 < inputs.len() {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_row += 1;
                             current_pos = inputs[current_row].len();
                         }
                     }
                     MouseEventKind::ScrollUp => {
                         if !is_locked && current_row > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
                             current_row -= 1;
                             current_pos = inputs[current_row].len();
                         }
@@ -1171,6 +1184,7 @@ T = ""
 [remarks]
 R0 = ""
 "#;
+
         fs::write(filename, initial_content)?;
         return Ok((vec!["".to_string(); 20], vec![])); // 修改此处为20
     }
@@ -1815,4 +1829,10 @@ fn rename_section_in_file(
     let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(func_toml_path, toml_string)?;
     Ok(())
+}
+
+/// 格式化数学表达式，在运算符前后添加一个空格，并移除多余的空格
+fn format_math_expression(expression: &str) -> String {
+    let re = Regex::new(r"\s*([+\-*/=])\s*").unwrap();
+    re.replace_all(expression, " $1 ").to_string()
 }
