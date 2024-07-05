@@ -366,11 +366,14 @@ fn run_app(
     let mut variables = HashMap::new();
     let mut current_row = 0;
     let mut current_pos = 0;
-    let input_width = 50;
+    let input_width = 60;
     let output_width = 20;
-    let title = " RS Mathematical Tools                                                   V1.2.8 ";
-    let heade = "                  Result  =  Mathematical Expression                        ";
-    let foote = " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename github.com/pasdq ";
+    let title =
+        " RS Mathematical Tools                                                             V1.2.8 ";
+    let heade =
+        "                  Result  =  Mathematical Expression                                  ";
+    let foote =
+        " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename           github.com/pasdq ";
     let saved = "                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -771,7 +774,12 @@ fn run_app(
                             queue!(stdout, cursor::Hide)?;
                         } else {
                             queue!(stdout, cursor::Show)?;
+                            // 调用 align_hash_comments 函数对齐所有输入框中的 `#`
+                            align_hash_comments(inputs);
                         }
+                    }
+                    (KeyCode::F(9), KeyEventKind::Press) => {
+                        remove_spaces_before_hash(inputs, &mut current_row, &mut current_pos);
                     }
                     (KeyCode::Char('u'), KeyEventKind::Press) if
                         modifiers.contains(KeyModifiers::CONTROL)
@@ -1068,7 +1076,7 @@ fn run_app(
                                 // 修改此处为16
                                 inputs[current_row].clear();
                                 inputs[current_row].push_str(
-                                    "# Global variable Z is limited to the Q-T area only"
+                                    "# Global variable Z is limited to the R ~ T area only"
                                 ); // 修改此处为Q-T
                             } else {
                                 push_undo_stack(&undo_stack, &inputs);
@@ -1834,5 +1842,59 @@ fn rename_section_in_file(
 /// 格式化数学表达式，在运算符前后添加一个空格，并移除多余的空格
 fn format_math_expression(expression: &str) -> String {
     let re = Regex::new(r"\s*([+\-*/=])\s*").unwrap();
-    re.replace_all(expression, " $1 ").to_string()
+
+    // Split the expression at the first occurrence of '#'
+    if let Some((before_comment, comment)) = expression.split_once('#') {
+        let formatted_before_comment = re.replace_all(before_comment, " $1 ").to_string();
+        // Return combined result with the comment part unchanged
+        format!("{}#{}", formatted_before_comment, comment)
+    } else {
+        // If there's no '#', format the entire expression
+        re.replace_all(expression, " $1 ").to_string()
+    }
+}
+
+/// 对齐 #
+fn align_hash_comments(inputs: &mut Vec<String>) {
+    // 找到所有输入框中第一个非行头的 `#` 的最大位置
+    let max_hash_pos = inputs
+        .iter()
+        .filter_map(|input| {
+            let hash_pos = input.find('#');
+            if let Some(pos) = hash_pos {
+                if pos > 0 { Some(pos) } else { None }
+            } else {
+                None
+            }
+        })
+        .max()
+        .unwrap_or(0);
+
+    // 对每个输入框进行处理
+    for input in inputs.iter_mut() {
+        if let Some(hash_pos) = input.find('#') {
+            if hash_pos > 0 {
+                // 在 `#` 前添加适当的空格以对齐
+                let padding = " ".repeat(max_hash_pos - hash_pos);
+                *input = format!("{}{}", &input[..hash_pos], padding) + &input[hash_pos..];
+            }
+        }
+    }
+}
+
+/// F5 删掉 # 之前的空格一次
+fn remove_spaces_before_hash(inputs: &mut Vec<String>, current_row: &mut usize, current_pos: &mut usize) {
+    for (i, input) in inputs.iter_mut().enumerate() {
+        if let Some(hash_pos) = input.find('#') {
+            if hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
+                // 删除 `#` 前的所有空格
+                while hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
+                    input.remove(hash_pos - 1);
+                    if i == *current_row && *current_pos > 0 {
+                        *current_pos -= 1;
+                    }
+                }
+            }
+        }
+    }
 }
