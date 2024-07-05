@@ -52,6 +52,25 @@ struct Args {
     filename: Option<String>,
 }
 
+struct TerminalManager;
+
+impl TerminalManager {
+    pub fn new() -> io::Result<Self> {
+        let mut stdout = io::stdout();
+        enable_raw_mode()?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        Ok(Self)
+    }
+}
+
+impl Drop for TerminalManager {
+    fn drop(&mut self) {
+        let mut stdout = io::stdout();
+        disable_raw_mode().unwrap();
+        execute!(stdout, LeaveAlternateScreen, DisableMouseCapture).unwrap();
+    }
+}
+
 fn handle_fc_command(
     command: &str,
     inputs: &mut Vec<String>,
@@ -67,7 +86,8 @@ fn handle_fc_command(
     }
 
     if let Some(commands) = func_map.get(key) {
-        for input in inputs.iter_mut().take(14) {
+        for input in inputs.iter_mut().take(20) {
+            // 修改此处为20
             input.clear();
         }
         for (input_key, input_value) in commands {
@@ -86,6 +106,12 @@ fn handle_fc_command(
                 "L" => 11,
                 "M" => 12,
                 "N" => 13,
+                "O" => 14,
+                "P" => 15,
+                "Q" => 16,
+                "R" => 17,
+                "S" => 18,
+                "T" => 19,
                 _ => {
                     continue;
                 }
@@ -138,6 +164,12 @@ K = ""
 L = ""
 M = ""
 N = ""
+O = ""
+P = ""
+Q = ""
+R = ""
+S = ""
+T = ""
 
 [remarks]
 R0 = ""
@@ -213,12 +245,54 @@ step = "0.1"
 }
 
 fn main() -> io::Result<()> {
+    let _terminal_manager = TerminalManager::new()?;
+
     let exe_path = env::current_exe()?;
     let exe_dir = exe_path.parent().unwrap();
     let func_toml_path = exe_dir.join(".func.toml");
     let backup_toml_path = exe_dir.join(".func.toml.bak");
 
-    if func_toml_path.exists() {
+    if !func_toml_path.exists() {
+        // 创建一个新的 .func.toml 文件之前，先创建一个备份文件
+        let initial_content =
+            r#"
+[home]
+A = ""
+B = ""
+C = ""
+D = ""
+E = ""
+F = ""
+G = ""
+H = ""
+I = ""
+J = ""
+K = ""
+L = ""
+M = ""
+N = ""
+O = ""
+P = ""
+Q = ""
+R = ""
+S = ""
+T = ""
+
+[remarks]
+R0 = ""
+
+[const]
+k = "1000.0 # Thousand"
+
+[TUI]
+color = "Green"
+attribute = "Underlined"
+step = "0.1"
+"#;
+        fs::write(&func_toml_path, initial_content)?;
+        fs::write(&backup_toml_path, initial_content)?;
+    } else {
+        // 如果 .func.toml 文件存在，创建其备份
         fs::copy(&func_toml_path, &backup_toml_path)?;
     }
 
@@ -236,15 +310,13 @@ fn main() -> io::Result<()> {
     let args = Args::parse();
     let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
     let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| {
-        (vec!["".to_string(); 14], vec![])
+        (vec!["".to_string(); 20], vec![]) // 修改此处为20
     });
     let lock_state = Arc::new(RwLock::new(false));
     let current_section = Arc::new(RwLock::new("home".to_string()));
 
     let undo_stack = Arc::new(RwLock::new(Vec::new()));
 
-    enable_raw_mode()?;
-    execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     let result = run_app(
         &filename,
         &mut inputs,
@@ -259,8 +331,6 @@ fn main() -> io::Result<()> {
         &func_toml_path,
         Arc::clone(&undo_stack)
     );
-    disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
     result
 }
 
@@ -296,15 +366,12 @@ fn run_app(
     let mut variables = HashMap::new();
     let mut current_row = 0;
     let mut current_pos = 0;
-    let input_width = 57;
-    let output_width = 23;
-    let title =
-        " RS Mathematical Tools                                                             V1.2.7 ";
-    let heade =
-        "                     Result  =  Mathematical Expression                               ";
-    let foote =
-        " about | rate | fc:sec | clear | new | delete | clone | rename           github.com/pasdq ";
-    let saved = "                                Recalculate & Save to";
+    let input_width = 50;
+    let output_width = 20;
+    let title = " RS Mathematical Tools                                                   V1.2.8 ";
+    let heade = "                  Result  =  Mathematical Expression                        ";
+    let foote = " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename github.com/pasdq ";
+    let saved = "                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
     let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
@@ -450,7 +517,7 @@ fn run_app(
                     } else {
                         queue!(
                             buffer,
-                            SetForegroundColor(if i >= 11 { Color::Blue } else { tui_color }),
+                            SetForegroundColor(if i >= 17 { Color::Blue } else { tui_color }), // 修改此处为17
                             cursor::MoveTo(0, (i + 3) as u16),
                             Print(
                                 format!(
@@ -497,7 +564,7 @@ fn run_app(
                 } else {
                     queue!(
                         buffer,
-                        SetForegroundColor(if i >= 11 { Color::Blue } else { Color::Reset }),
+                        SetForegroundColor(if i >= 17 { Color::Blue } else { Color::Reset }), // 修改此处为17
                         cursor::MoveTo(0, (i + 3) as u16),
                         Print(
                             format!(
@@ -531,16 +598,16 @@ fn run_app(
             cursor::MoveTo(0, (inputs.len() + 5) as u16),
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
-            cursor::MoveTo(13, (inputs.len() + 4) as u16),
-            Print(format!("(A - K) Sum = Z = {}", format_with_thousands_separator(sum))),
-            cursor::MoveTo(13, (inputs.len() + 5) as u16),
-            Print(format!("(A - K) Average = {}", format_with_thousands_separator(average))),
+            cursor::MoveTo(10, (inputs.len() + 4) as u16),
+            Print(format!("(A - Q) Sum = Z = {}", format_with_thousands_separator(sum))),
+            cursor::MoveTo(10, (inputs.len() + 5) as u16),
+            Print(format!("(A - Q) Average = {}", format_with_thousands_separator(average))),
             cursor::MoveTo(0, (inputs.len() + 8) as u16),
             ResetColor,
             SetAttribute(Attribute::Reverse),
             Print(foote),
             ResetColor,
-            cursor::MoveTo(22, 20),
+            cursor::MoveTo(19, 26),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
             Print(
                 format!("Status = {} (F4 Status Switch)", if is_locked {
@@ -557,14 +624,14 @@ fn run_app(
         if show_saved_message {
             queue!(
                 buffer,
-                cursor::MoveTo(0, 17),
+                cursor::MoveTo(0, 23),
                 SetForegroundColor(Color::DarkYellow),
                 Print(format!("{} -> Section: [{}]", saved, current_section_name)),
                 ResetColor
             )?;
             show_saved_message = false;
         } else {
-            queue!(buffer, cursor::MoveTo(0, 17), Print(" ".repeat(term_width as usize)))?;
+            queue!(buffer, cursor::MoveTo(0, 23), Print(" ".repeat(term_width as usize)))?;
         }
 
         for (i, line) in additional_lines.iter().enumerate() {
@@ -711,10 +778,12 @@ fn run_app(
                     => {
                         if !is_locked {
                             push_undo_stack(&undo_stack, &inputs);
-                            for input in inputs.iter_mut().take(11) {
+                            for input in inputs.iter_mut().take(17) {
+                                // 修改此处为17
                                 input.clear();
                             }
-                            for label in (b'A'..=b'L').map(|c| (c as char).to_string()) {
+                            for label in (b'A'..=b'T').map(|c| (c as char).to_string()) {
+                                // 修改此处为T
                                 variables.remove(&label);
                             }
                             current_pos = 0;
@@ -796,12 +865,10 @@ fn run_app(
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
                         if !is_locked {
-                            if !inputs[current_row].trim().is_empty() {
-                                if current_row < inputs.len() - 1 {
-                                    inputs[current_row + 1] = inputs[current_row].clone();
-                                    current_row += 1;
-                                    current_pos = inputs[current_row].len();
-                                }
+                            if current_row < inputs.len() - 1 {
+                                inputs[current_row + 1] = inputs[current_row].clone();
+                                current_row += 1;
+                                current_pos = inputs[current_row].len();
                             }
                         }
                     }
@@ -911,7 +978,7 @@ fn run_app(
                                 let current_section_name = current_section.read().unwrap().clone();
                                 delete_section_from_file(
                                     &current_section_name,
-                                    &func_toml_path
+                                    func_toml_path
                                 ).unwrap();
                                 *current_section.write().unwrap() = "home".to_string();
                                 load_section("home", inputs, func_toml_path);
@@ -938,7 +1005,8 @@ fn run_app(
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "clear" || input_command == "cls" {
                                 if !is_locked {
-                                    for input in inputs.iter_mut().take(14) {
+                                    for input in inputs.iter_mut().take(20) {
+                                        // 修改此处为20
                                         input.clear();
                                     }
                                     current_pos = 0;
@@ -986,11 +1054,12 @@ fn run_app(
                     }
                     (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
                         if inputs[current_row].len() < input_width {
-                            if (c == 'Z' || c == 'z') && current_row <= 10 {
+                            if (c == 'Z' || c == 'z') && current_row <= 16 {
+                                // 修改此处为16
                                 inputs[current_row].clear();
                                 inputs[current_row].push_str(
-                                    "# Global variable Z is limited to the L-N area only"
-                                );
+                                    "# Global variable Z is limited to the Q-T area only"
+                                ); // 修改此处为Q-T
                             } else {
                                 push_undo_stack(&undo_stack, &inputs);
                                 inputs[current_row].insert(current_pos, c);
@@ -1092,12 +1161,18 @@ K = ""
 L = ""
 M = ""
 N = ""
+O = ""
+P = ""
+Q = ""
+R = ""
+S = ""
+T = ""
 
 [remarks]
 R0 = ""
 "#;
         fs::write(filename, initial_content)?;
-        return Ok((vec!["".to_string(); 14], vec![]));
+        return Ok((vec!["".to_string(); 20], vec![])); // 修改此处为20
     }
 
     let mut content = fs::read_to_string(filename)?;
@@ -1122,6 +1197,12 @@ R0 = ""
             initial_0_section.insert("L".to_string(), Value::String("".to_string()));
             initial_0_section.insert("M".to_string(), Value::String("".to_string()));
             initial_0_section.insert("N".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("O".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("P".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("Q".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("R".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("S".to_string(), Value::String("".to_string()));
+            initial_0_section.insert("T".to_string(), Value::String("".to_string()));
 
             table.insert("home".to_string(), Value::Table(initial_0_section));
             content = toml
@@ -1134,7 +1215,7 @@ R0 = ""
     let value: Value = toml
         ::from_str(&content)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-    let mut inputs = vec!["".to_string(); 14];
+    let mut inputs = vec!["".to_string(); 20]; // 修改此处为20
     let mut additional_lines = vec![];
 
     if let Value::Table(table) = value {
@@ -1156,6 +1237,12 @@ R0 = ""
                         "L" => 11,
                         "M" => 12,
                         "N" => 13,
+                        "O" => 14,
+                        "P" => 15,
+                        "Q" => 16,
+                        "R" => 17,
+                        "S" => 18,
+                        "T" => 19,
                         _ => {
                             continue;
                         }
@@ -1318,7 +1405,7 @@ fn evaluate_and_solve(
 /// 将数学表达式中的百分比（例如 `50%`）替换为其小数等价物（例如 `0.5`）
 fn replace_percentage(expression: &str) -> String {
     let re = Regex::new(r"(\d+(\.\d+)?)%").unwrap();
-    re.replace_all(expression, "$1 * 0.01").to_string()
+    re.replace_all(expression, r"$1 * 0.01").to_string()
 }
 
 /// 将数学表达式中的变量名替换为给定变量映射中的相应值
@@ -1345,7 +1432,7 @@ fn replace_variables(expression: String, variables: &HashMap<String, String>) ->
 fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
     let mut sum = 0.0;
     let mut count = 0;
-    for result in results.iter().take(11) {
+    for result in results.iter().take(17) {
         let cleaned_result = remove_thousands_separator(result);
         match cleaned_result.parse::<f64>() {
             Ok(val) => {
@@ -1401,7 +1488,8 @@ fn remove_thousands_separator(value: &str) -> String {
 fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) {
     if let Ok((func_map, _, _, _, _)) = load_func_commands_from_file(func_toml_path) {
         if let Some(commands) = func_map.get(section) {
-            for input in inputs.iter_mut().take(14) {
+            for input in inputs.iter_mut().take(20) {
+                // 修改此处为20
                 input.clear();
             }
             for (input_key, input_value) in commands {
@@ -1420,6 +1508,12 @@ fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) 
                     "L" => 11,
                     "M" => 12,
                     "N" => 13,
+                    "O" => 14,
+                    "P" => 15,
+                    "Q" => 16,
+                    "R" => 17,
+                    "S" => 18,
+                    "T" => 19,
                     _ => {
                         continue;
                     }
@@ -1618,6 +1712,12 @@ fn add_new_section_to_file(section_name: &str, func_toml_path: &Path) -> Result<
                 "L",
                 "M",
                 "N",
+                "O",
+                "P",
+                "Q",
+                "R",
+                "S",
+                "T",
             ].iter() {
                 new_section.insert(key.to_string(), Value::String("".to_string()));
             }
