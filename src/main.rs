@@ -775,7 +775,7 @@ fn run_app(
                         } else {
                             queue!(stdout, cursor::Show)?;
                             // 调用 align_hash_comments 函数对齐所有输入框中的 `#`
-                            align_hash_comments(inputs);
+                            align_hash_comments(inputs, &mut current_row, &mut current_pos);
                         }
                     }
                     (KeyCode::F(9), KeyEventKind::Press) => {
@@ -1854,8 +1854,8 @@ fn format_math_expression(expression: &str) -> String {
     }
 }
 
-/// 对齐 #
-fn align_hash_comments(inputs: &mut Vec<String>) {
+/// 对齐 # 并更新光标位置
+fn align_hash_comments(inputs: &mut Vec<String>, current_row: &mut usize, current_pos: &mut usize) {
     // 找到所有输入框中第一个非行头的 `#` 的最大位置
     let max_hash_pos = inputs
         .iter()
@@ -1871,29 +1871,37 @@ fn align_hash_comments(inputs: &mut Vec<String>) {
         .unwrap_or(0);
 
     // 对每个输入框进行处理
-    for input in inputs.iter_mut() {
+    for (i, input) in inputs.iter_mut().enumerate() {
         if let Some(hash_pos) = input.find('#') {
             if hash_pos > 0 {
                 // 在 `#` 前添加适当的空格以对齐
                 let padding = " ".repeat(max_hash_pos - hash_pos);
                 *input = format!("{}{}", &input[..hash_pos], padding) + &input[hash_pos..];
+
+                // 如果是当前行，更新光标位置
+                if i == *current_row {
+                    *current_pos = hash_pos + padding.len();
+                }
             }
         }
     }
 }
 
-/// F5 删掉 # 之前的空格一次
+/// F9 删掉 # 之前的空格一次
 fn remove_spaces_before_hash(inputs: &mut Vec<String>, current_row: &mut usize, current_pos: &mut usize) {
     for (i, input) in inputs.iter_mut().enumerate() {
         if let Some(hash_pos) = input.find('#') {
-            if hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
-                // 删除 `#` 前的所有空格
-                while hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
-                    input.remove(hash_pos - 1);
-                    if i == *current_row && *current_pos > 0 {
-                        *current_pos -= 1;
-                    }
+            // 删除 `#` 前的所有空格
+            while hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
+                input.remove(hash_pos - 1);
+                if i == *current_row && *current_pos > 0 {
+                    *current_pos -= 1;
                 }
+            }
+
+            // 如果是当前行，确保光标在 `#` 之前
+            if i == *current_row {
+                *current_pos = hash_pos - 1;
             }
         }
     }
