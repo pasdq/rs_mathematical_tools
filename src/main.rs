@@ -613,7 +613,7 @@ fn run_app(
             cursor::MoveTo(19, 26),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
             Print(
-                format!("Status = {} (F4 Status Switch)", if is_locked {
+                format!("Status = {} (F4 Status Switch & Align #)", if is_locked {
                     "Locked"
                 } else {
                     "Opened"
