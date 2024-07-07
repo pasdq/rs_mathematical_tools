@@ -32,9 +32,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let default_boc = "https://www.boc.cn/sourcedb/whpj/";
     let default_ccpr = "https://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/ccpr.json";
 
-    // 读取.link.toml文件，如果存在
-    let (boc_url, ccpr_url) = if Path::new(".link.toml").exists() {
-        let config_content = fs::read_to_string(".link.toml")?;
+    // 读取.rate.toml文件，如果存在
+    let (boc_url, ccpr_url) = if Path::new(".rate.toml").exists() {
+        let config_content = fs::read_to_string(".rate.toml")?;
         let links: Links = toml::from_str(&config_content)?;
         (links.boc, links.ccpr)
     } else {
@@ -46,19 +46,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ok(rate) => {
             let now = Local::now();
             let formatted_time = now.format("%Y/%m/%d %H:%M").to_string();
-            let output = format!("{:.4} # BOC ({})", rate, formatted_time);
-            println!("{}", output);
+            print!("{:.4} # BOC ({})", rate, formatted_time);
         },
         Err(_) => {
             match fetch_ccpr_exchange_rate(&ccpr_url) {
                 Ok(rate) => {
                     let now = Local::now();
                     let formatted_time = now.format("%Y/%m/%d %H:%M").to_string();
-                    let output = format!("{:.4} # CCPR ({})", rate, formatted_time);
-                    println!("{}", output);
+                    print!("{:.4} # CCPR ({})", rate, formatted_time);
                 },
                 Err(_) => {
-                    println!("两种汇率来源全部失效, 请检查链接!");
+                    print!("两种汇率来源全部失效, 请检查链接!");
                 }
             }
         }
