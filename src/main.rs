@@ -749,7 +749,7 @@ fn run_app(
                     clear_undo_stack(&undo_stack);
                 }
 
-                (KeyCode::Char('n'), KeyEventKind::Press)
+                (KeyCode::Char('g'), KeyEventKind::Press)
                     if modifiers.contains(KeyModifiers::CONTROL) =>
                 {
                     if !inputs[current_row].trim().is_empty() {
@@ -764,7 +764,7 @@ fn run_app(
                     }
                 }
 
-                (KeyCode::F(5), key_event_kind)
+                (KeyCode::Tab, key_event_kind)
                     if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release)
                         || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) =>
                 {
@@ -914,7 +914,7 @@ fn run_app(
                         current_pos = inputs[current_row].len();
                     }
                 }
-                (KeyCode::Down | KeyCode::Tab, KeyEventKind::Press) => {
+                (KeyCode::Down, KeyEventKind::Press) => {
                     if !is_locked && current_row < inputs.len() - 1 {
                         inputs[current_row] = format_math_expression(&inputs[current_row]);
                         current_row += 1;
@@ -1938,7 +1938,7 @@ fn remove_spaces_before_hash(
     }
 }
 
-/// F5 单字跳转
+/// Tab 单字跳转
 fn jump_to_input_box(
     stdout: &mut io::Stdout,
     inputs: &Vec<String>,
