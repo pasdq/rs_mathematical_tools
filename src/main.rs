@@ -764,6 +764,14 @@ fn run_app(
                     }
                 }
 
+                (KeyCode::Char('f'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    if !is_locked {
+                        move_cursor_to_next_word(&inputs, &mut current_row, &mut current_pos);
+                    }
+                }
+
                 (KeyCode::Tab, key_event_kind)
                     if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release)
                         || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) =>
@@ -1972,4 +1980,28 @@ fn jump_to_input_box(
         Clear(ClearType::CurrentLine)
     )?;
     Ok(())
+}
+
+/// 移动光标到下一个单词后
+fn move_cursor_to_next_word(
+    inputs: &Vec<String>,
+    current_row: &mut usize,
+    current_pos: &mut usize,
+) {
+    let current_line = &inputs[*current_row];
+
+    // 如果光标在行尾，则从头开始查找
+    if *current_pos >= current_line.len() {
+        *current_pos = 0;
+    }
+
+    let remaining_text = &current_line[*current_pos..];
+
+    // 使用正则表达式找到下一个单词
+    let re = Regex::new(r"\S+").unwrap();
+    if let Some(mat) = re.find(remaining_text) {
+        *current_pos += mat.end();
+    } else {
+        *current_pos = current_line.len(); // 如果没有找到下一个单词，则移动到行尾
+    }
 }
