@@ -1888,20 +1888,26 @@ fn align_hash_comments(inputs: &mut Vec<String>, current_row: &mut usize, curren
 }
 
 /// F9 删掉 # 之前的空格一次
-fn remove_spaces_before_hash(inputs: &mut Vec<String>, current_row: &mut usize, current_pos: &mut usize) {
+fn remove_spaces_before_hash(
+    inputs: &mut Vec<String>,
+    current_row: &mut usize,
+    current_pos: &mut usize
+) {
     for (i, input) in inputs.iter_mut().enumerate() {
         if let Some(hash_pos) = input.find('#') {
+            // 检查 # 是否位于行头
+            if hash_pos == 0 {
+                continue; // 如果 # 位于行头，则跳过此行
+            }
+
             // 删除 `#` 前的所有空格
             while hash_pos > 0 && input.as_bytes()[hash_pos - 1] == b' ' {
                 input.remove(hash_pos - 1);
-                if i == *current_row && *current_pos > 0 {
-                    *current_pos -= 1;
-                }
             }
 
-            // 如果是当前行，确保光标在 `#` 之前
+            // 如果是当前行，确保光标在 `#` 上
             if i == *current_row {
-                *current_pos = hash_pos - 1;
+                *current_pos = input.find('#').unwrap_or(0);
             }
         }
     }
