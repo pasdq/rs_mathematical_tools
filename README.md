@@ -10,7 +10,7 @@
 - Function Commands: Enables predefined calculations using function commands from a configuration file.
 - Persistent State: Saves and loads input states to and from a configuration file.
 
-![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/13fe45ce-ca11-4fa4-88f5-4539648f5d17)
+![图片](https://github.com/pasdq/rs_mathematical_tools/assets/16551523/06591106-2abf-489a-a58c-a137724c3879)
 
 When the program starts, it will by default read the .last.txt file in the current directory. If the file does not exist, the program will create a new one. Starting from line 15, the program will display its contents in the TUI interface.
 
