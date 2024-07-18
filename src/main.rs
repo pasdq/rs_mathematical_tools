@@ -22,6 +22,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use toml::Value;
 
+// 仅在向 windows 平台编译时才会导入这个模块
+#[cfg(target_os = "windows")]
+use arboard::Clipboard;
+
 #[macro_use]
 extern crate lazy_static;
 use std::sync::Mutex;
@@ -837,6 +841,7 @@ fn run_app(
                         clear_undo_stack(&undo_stack);
                     }
                 }
+
                 (KeyCode::Char('s'), KeyEventKind::Press)
                     if modifiers.contains(KeyModifiers::CONTROL) =>
                 {
@@ -874,6 +879,28 @@ fn run_app(
                         current_row = 0;
                     }
                 }
+		
+		// Windows 平台独有快捷键, 关于剪切版的操作
+		#[cfg(target_os = "windows")]
+                (KeyCode::Char('q'), KeyEventKind::Press)
+                    if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    if current_row < inputs.len() {
+                        let clipboard_value =
+                            evaluate_and_solve(&inputs[current_row], &variables, current_row)
+                                .unwrap_or_else(|_| "Error".to_string());
+                        if clipboard_value != "Error" {
+                            let mut clipboard = Clipboard::new().unwrap();
+                            clipboard.set_text(clipboard_value).unwrap();
+
+                            // 光标闪烁提示复制完成
+                            execute!(stdout, cursor::Hide).unwrap();
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                            execute!(stdout, cursor::Show).unwrap();
+                        }
+                    }
+                }
+
                 (KeyCode::Char('t'), KeyEventKind::Press)
                     if modifiers.contains(KeyModifiers::CONTROL) =>
                 {
@@ -1359,6 +1386,7 @@ fn save_inputs_to_file(
 }
 
 /// 评估和求解输入中提供的数学表达式或方程
+/// 评估和求解输入中提供的数学表达式或方程
 fn evaluate_and_solve(
     input: &str,
     variables: &HashMap<String, String>,
@@ -1376,9 +1404,12 @@ fn evaluate_and_solve(
         return Ok("Qalculate!".to_string());
     }
 
-    let input_without_comment = match input.find('#') {
-        Some(pos) => &input[..pos],
-        None => input,
+    // 调用预处理函数，移除输入中的千位分隔符
+    let input_without_commas = remove_thousands_separator(input);
+
+    let input_without_comment = match input_without_commas.find('#') {
+        Some(pos) => &input_without_commas[..pos],
+        None => &input_without_commas,
     };
     let parts: Vec<&str> = input_without_comment.split('=').collect();
     if parts.len() == 2 {
