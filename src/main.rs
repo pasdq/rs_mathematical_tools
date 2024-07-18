@@ -673,7 +673,7 @@ fn run_app(
                 kind,
                 ..
             }) => match (code, kind) {
-                (KeyCode::Char('c'), KeyEventKind::Press)
+                (KeyCode::Char('q'), KeyEventKind::Press)
                     if modifiers.contains(KeyModifiers::CONTROL) =>
                 {
                     break;
@@ -882,7 +882,7 @@ fn run_app(
 		
 		// Windows 平台独有快捷键, 关于剪切版的操作
 		#[cfg(target_os = "windows")]
-                (KeyCode::Char('q'), KeyEventKind::Press)
+                (KeyCode::Char('c'), KeyEventKind::Press)
                     if modifiers.contains(KeyModifiers::CONTROL) =>
                 {
                     if current_row < inputs.len() {
