@@ -12,6 +12,7 @@ regex = "1.5"
 toml = "0.8.14"
 lazy_static = "1.4"
 rand = "0.8"
+arboard = "3.4.0"
 
 [profile.release]
 opt-level = 'z'          # 优化级别为“z”，这是最高级别的优化
