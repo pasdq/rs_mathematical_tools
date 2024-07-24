@@ -133,7 +133,7 @@ fn load_func_commands_from_file(
         HashMap<String, String>,
         Option<String>,
         Option<String>,
-        f64, // 改变返回值类型
+        f64,
     ),
     io::Error,
 > {
@@ -175,21 +175,31 @@ step = "0.1"
         fs::write(filename, initial_content)?;
     }
 
-    let content = fs::read_to_string(filename)?;
-    let value: Value = toml
-        ::from_str(&content)
-        .map_err(|_| {
-            io::Error::new(
+    let content = match fs::read_to_string(filename) {
+        Ok(content) => content,
+        Err(err) => {
+            return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "- The configuration file .func.toml has a syntax error!\n\n- Please locate it in the working directory and check it,\n- or you can delete it to restore the factory settings.\n"
-            )
-        })?;
+                format!("Failed to read {}: {}", filename.display(), err),
+            ));
+        }
+    };
+
+    let value: Value = match toml::from_str(&content) {
+        Ok(value) => value,
+        Err(err) => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid TOML in {}: {}", filename.display(), err),
+            ));
+        }
+    };
 
     let mut func_map = HashMap::new();
     let mut const_map = HashMap::new();
     let mut custom_color = None;
     let mut custom_attribute = None;
-    let mut step = 0.1; // 默认值为0.1
+    let mut step = 0.1;
 
     if let Value::Table(table) = value {
         for (key, value) in table {
@@ -213,7 +223,7 @@ step = "0.1"
                         .get("step")
                         .and_then(|v| v.as_str().and_then(|s| s.parse::<f64>().ok()))
                     {
-                        step = step_value; // 使用自定义的step值
+                        step = step_value;
                     }
                 }
             } else if let Value::Table(command_table) = value {
@@ -229,7 +239,7 @@ step = "0.1"
     } else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "TOML root is not a table",
+            format!("Invalid TOML in {}: expected a table", filename.display()),
         ));
     }
 
@@ -1385,7 +1395,6 @@ fn save_inputs_to_file(
     Ok(())
 }
 
-/// 评估和求解输入中提供的数学表达式或方程
 /// 评估和求解输入中提供的数学表达式或方程
 fn evaluate_and_solve(
     input: &str,
