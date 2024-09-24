@@ -33,6 +33,7 @@ use std::sync::Mutex;
 lazy_static! {
     static ref GLOBAL_SUM: Mutex<f64> = Mutex::new(0.0);
     static ref GLOBAL_COUNT: Mutex<usize> = Mutex::new(0);
+    static ref DECIMAL_PLACES: Mutex<usize> = Mutex::new(4); // 设置默认保留四位小数
 }
 
 #[derive(Parser, Debug)]
@@ -372,7 +373,7 @@ fn run_app(
     let input_width = 60;
     let output_width = 20;
     let title =
-        " RS Mathematical Tools                                                             V1.2.8 ";
+        " RS Mathematical Tools                                                             V1.2.9 ";
     let heade =
         "                  Result  =  Mathematical Expression                                  ";
     let foote =
@@ -1553,7 +1554,9 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
 
 /// 格式化数值, 在数值中添加千位分隔符以提高可读性
 fn format_with_thousands_separator(value: f64) -> String {
-    let formatted_value = format!("{:.3}", value);
+    let decimal_places = *DECIMAL_PLACES.lock().unwrap(); // 获取全局控制的小数位数
+    let formatted_value = format!("{:.1$}", value, decimal_places); // 根据全局变量保留小数
+
     let parts: Vec<&str> = formatted_value.split('.').collect();
     let int_part = parts[0];
     let dec_part = parts.get(1).unwrap_or(&"");
@@ -2045,3 +2048,4 @@ fn move_cursor_to_next_word(
         *current_pos = current_line.len(); // 如果没有找到下一个单词，则移动到行尾
     }
 }
+
