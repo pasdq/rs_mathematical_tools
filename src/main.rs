@@ -1555,12 +1555,47 @@ fn calculate_sum_and_count(results: &[String]) -> (f64, usize) {
 /// 格式化数值, 在数值中添加千位分隔符以提高可读性
 fn format_with_thousands_separator(value: f64) -> String {
     let decimal_places = *DECIMAL_PLACES.lock().unwrap(); // 获取全局控制的小数位数
-    let formatted_value = format!("{:.1$}", value, decimal_places); // 根据全局变量保留小数
 
+    // 判断是否为整数，若是整数则不保留小数位
+    if value.fract() == 0.0 {
+        // 如果是整数，直接返回整数部分
+        let formatted_int = format!("{}", value.trunc() as i64); // 转换为整数形式
+        return formatted_int.chars()
+            .rev()
+            .collect::<Vec<_>>()
+            .chunks(3)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(",")
+            .chars()
+            .rev()
+            .collect::<String>();
+    }
+
+    // 如果不是整数，根据 decimal_places 先将小数部分转为字符串
+    let formatted_value = format!("{:.1$}", value, decimal_places); // 根据全局变量保留小数位
     let parts: Vec<&str> = formatted_value.split('.').collect();
     let int_part = parts[0];
     let dec_part = parts.get(1).unwrap_or(&"");
 
+    // 移除小数部分末尾的多余零
+    let dec_part_trimmed = dec_part.trim_end_matches('0');
+
+    // 如果没有小数位，返回整数部分
+    if dec_part_trimmed.is_empty() {
+        return int_part.chars()
+            .rev()
+            .collect::<Vec<_>>()
+            .chunks(3)
+            .map(|chunk| chunk.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join(",")
+            .chars()
+            .rev()
+            .collect::<String>();
+    }
+
+    // 如果有小数位，返回整数部分加上处理后的小数部分
     let formatted_int = int_part
         .chars()
         .rev()
@@ -1573,11 +1608,7 @@ fn format_with_thousands_separator(value: f64) -> String {
         .rev()
         .collect::<String>();
 
-    if dec_part.is_empty() {
-        formatted_int
-    } else {
-        format!("{}.{}", formatted_int, dec_part)
-    }
+    format!("{}.{}", formatted_int, dec_part_trimmed)
 }
 
 /// 移除格式化数值中的千位分隔符以便进一步处理
