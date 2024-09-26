@@ -395,10 +395,13 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 60;
     let output_width = 20;
-    let title =" RS Mathematical Tools                                                             V1.2.9 ";
-    let heade ="                  Result  =  Mathematical Expression                                  ";
-    let foote =" About | Rate | Clear | New | Delete | Clone | Rename | Set | F12        github.com/pasdq ";
-    let saved ="                             Recalculate & Save to";
+    let title =
+        " RS Mathematical Tools                                                             V1.2.9 ";
+    let heade =
+        "                  Result  =  Mathematical Expression                                  ";
+    let foote =
+        " About | Rate | Clear | New | Delete | Clone | Rename | Set | F12        github.com/pasdq ";
+    let saved = "                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
     let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
@@ -875,8 +878,8 @@ fn run_app(
                                         for (i, line) in lines.iter().enumerate() {
                                             inputs[i] = line.to_string();
                                         }
-				current_pos = 0;
-                            current_row = 0;
+                                        current_pos = 0;
+                                        current_row = 0;
                                     }
                                     Err(e) => {
                                         inputs[current_row].clear();
@@ -1182,6 +1185,42 @@ fn run_app(
                                         );
                                     }
                                 }
+                                current_pos = inputs[current_row].len();
+                            } else if cfg!(target_os = "windows") && input_command == "help" {
+                                // 获取当前可执行文件所在的目录
+                                let exe_path = env::current_exe().unwrap();
+                                let exe_dir = exe_path.parent().unwrap();
+
+                                // 设置 help.pdf 的路径，位于当前目录
+                                let pdf_path = exe_dir.join("help.pdf");
+
+                                // 检查文件是否存在
+                                if pdf_path.exists() {
+                                    // 使用默认的 PDF 阅读器打开 help.pdf
+                                    let output = std::process::Command
+                                        ::new("cmd")
+                                        .args(&["/C", "start", "", pdf_path.to_str().unwrap()])
+                                        .spawn(); // 非阻塞启动
+
+                                    match output {
+                                        Ok(_) => {
+                                            inputs[current_row].clear();
+                                            //inputs[current_row].push_str("help.pdf opened successfully!");
+                                        }
+                                        Err(_) => {
+                                            inputs[current_row].clear();
+                                            inputs[current_row].push_str(
+                                                "Failed to open help.pdf!"
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    inputs[current_row].clear();
+                                    inputs[current_row].push_str(
+                                        "help.pdf does not exist in the current directory."
+                                    );
+                                }
+
                                 current_pos = inputs[current_row].len();
                             } else if input_command == "rate" {
                                 inputs[current_row].clear();
