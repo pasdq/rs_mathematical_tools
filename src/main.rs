@@ -2,13 +2,29 @@ use clap::Parser;
 use crossterm::{
     cursor,
     event::{
-        self, read, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent,
-        KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+        self,
+        read,
+        DisableMouseCapture,
+        EnableMouseCapture,
+        Event,
+        KeyCode,
+        KeyEvent,
+        KeyEventKind,
+        KeyModifiers,
+        MouseButton,
+        MouseEvent,
+        MouseEventKind,
     },
-    execute, queue,
-    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+    execute,
+    queue,
+    style::{ Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor },
     terminal::{
-        disable_raw_mode, enable_raw_mode, size, Clear, ClearType, EnterAlternateScreen,
+        disable_raw_mode,
+        enable_raw_mode,
+        size,
+        Clear,
+        ClearType,
+        EnterAlternateScreen,
         LeaveAlternateScreen,
     },
 };
@@ -17,9 +33,9 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::io::{ self, Write };
+use std::path::{ Path, PathBuf };
+use std::sync::{ Arc, RwLock };
 use toml::Value;
 
 // 仅在向 windows 平台编译时才会导入这个模块
@@ -65,7 +81,7 @@ fn handle_fc_command(
     command: &str,
     inputs: &mut Vec<String>,
     func_map: &mut HashMap<String, HashMap<String, String>>,
-    func_toml_path: &Path,
+    func_toml_path: &Path
 ) -> bool {
     let key = &command[3..];
     if let Ok((new_func_map, _, _, _, _)) = load_func_commands_from_file(func_toml_path) {
@@ -117,7 +133,7 @@ fn handle_const_command(
     command: &str,
     inputs: &mut Vec<String>,
     const_map: &HashMap<String, String>,
-    current_row: usize,
+    current_row: usize
 ) -> bool {
     if let Some(value) = const_map.get(command) {
         inputs[current_row] = value.to_string();
@@ -127,7 +143,7 @@ fn handle_const_command(
 }
 
 fn load_func_commands_from_file(
-    filename: &Path,
+    filename: &Path
 ) -> Result<
     (
         HashMap<String, HashMap<String, String>>,
@@ -136,10 +152,11 @@ fn load_func_commands_from_file(
         Option<String>,
         f64,
     ),
-    io::Error,
+    io::Error
 > {
     if !filename.exists() {
-        let initial_content = r#"
+        let initial_content =
+            r#"
 [home]
 A = ""
 B = ""
@@ -179,20 +196,24 @@ step = "0.1"
     let content = match fs::read_to_string(filename) {
         Ok(content) => content,
         Err(err) => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Failed to read {}: {}", filename.display(), err),
-            ));
+            return Err(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Failed to read {}: {}", filename.display(), err)
+                )
+            );
         }
     };
 
     let value: Value = match toml::from_str(&content) {
         Ok(value) => value,
         Err(err) => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("Invalid TOML in {}: {}", filename.display(), err),
-            ));
+            return Err(
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid TOML in {}: {}", filename.display(), err)
+                )
+            );
         }
     };
 
@@ -220,9 +241,10 @@ step = "0.1"
                     custom_attribute = tui_table
                         .get("attribute")
                         .and_then(|v| v.as_str().map(String::from));
-                    if let Some(step_value) = tui_table
-                        .get("step")
-                        .and_then(|v| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+                    if
+                        let Some(step_value) = tui_table
+                            .get("step")
+                            .and_then(|v| v.as_str().and_then(|s| s.parse::<f64>().ok()))
                     {
                         step = step_value;
                     }
@@ -238,10 +260,12 @@ step = "0.1"
             }
         }
     } else {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Invalid TOML in {}: expected a table", filename.display()),
-        ));
+        return Err(
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Invalid TOML in {}: expected a table", filename.display())
+            )
+        );
     }
 
     Ok((func_map, const_map, custom_color, custom_attribute, step))
@@ -257,7 +281,8 @@ fn main() -> io::Result<()> {
 
     if !func_toml_path.exists() {
         // 创建一个新的 .func.toml 文件之前，先创建一个备份文件
-        let initial_content = r#"
+        let initial_content =
+            r#"
 [home]
 A = ""
 B = ""
@@ -298,21 +323,19 @@ step = "0.1"
         fs::copy(&func_toml_path, &backup_toml_path)?;
     }
 
-    let (mut func_map, const_map, custom_color, custom_attribute, step) =
-        match load_func_commands_from_file(&func_toml_path) {
-            Ok(result) => result,
-            Err(e) => {
-                eprintln!("{}", e);
-                wait_for_keypress("- Press any key to exit ...");
-                return Err(e);
-            }
-        };
+    let (mut func_map, const_map, custom_color, custom_attribute, step) = match
+        load_func_commands_from_file(&func_toml_path)
+    {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("{}", e);
+            wait_for_keypress("- Press any key to exit ...");
+            return Err(e);
+        }
+    };
 
     let args = Args::parse();
-    let filename = args
-        .filename
-        .map(PathBuf::from)
-        .unwrap_or_else(|| exe_dir.join(".func.toml"));
+    let filename = args.filename.map(PathBuf::from).unwrap_or_else(|| exe_dir.join(".func.toml"));
     let (mut inputs, additional_lines) = read_inputs_from_file(&filename).unwrap_or_else(|_| {
         (vec!["".to_string(); 20], vec![]) // 修改此处为20
     });
@@ -333,13 +356,13 @@ step = "0.1"
         custom_attribute,
         step, // 传递step值
         &func_toml_path,
-        Arc::clone(&undo_stack),
+        Arc::clone(&undo_stack)
     );
     result
 }
 
 fn wait_for_keypress(message: &str) {
-    use crossterm::event::{read, Event, KeyCode};
+    use crossterm::event::{ read, Event, KeyCode };
 
     println!("{}", message);
 
@@ -364,7 +387,7 @@ fn run_app(
     custom_attribute: Option<String>,
     step: f64,
     func_toml_path: &Path,
-    undo_stack: Arc<RwLock<Vec<Vec<String>>>>,
+    undo_stack: Arc<RwLock<Vec<Vec<String>>>>
 ) -> io::Result<()> {
     let mut stdout = io::stdout();
     let mut variables = HashMap::new();
@@ -377,7 +400,7 @@ fn run_app(
     let heade =
         "                  Result  =  Mathematical Expression                                  ";
     let foote =
-        " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename           github.com/pasdq ";
+        " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename | Set     github.com/pasdq ";
     let saved = "                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -462,11 +485,7 @@ fn run_app(
             } else {
                 match evaluate_and_solve(input, &variables, i) {
                     Ok(res) => {
-                        if res.len() <= output_width - 3 {
-                            res
-                        } else {
-                            "Error".to_string()
-                        }
+                        if res.len() <= output_width - 3 { res } else { "Error".to_string() }
                     }
                     Err(_) => {
                         if input.starts_with("fc:") {
@@ -482,24 +501,28 @@ fn run_app(
                 if result == "Error" || (input.starts_with("fc:") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(if input.starts_with("fc:") {
-                            Color::Blue
-                        } else {
-                            Color::DarkRed
-                        }),
-                        cursor::MoveTo(0, (i + 3) as u16),
-                        Print(format!(
-                            "{}: [{:>width$}] = [{:<input_width$}]",
-                            label,
+                        SetForegroundColor(
                             if input.starts_with("fc:") {
-                                ""
+                                Color::Blue
                             } else {
-                                result.as_str()
-                            },
-                            input,
-                            width = output_width,
-                            input_width = input_width
-                        )),
+                                Color::DarkRed
+                            }
+                        ),
+                        cursor::MoveTo(0, (i + 3) as u16),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                if input.starts_with("fc:") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
                         ResetColor
                     )?;
                 } else {
@@ -509,14 +532,16 @@ fn run_app(
                             SetForegroundColor(tui_color),
                             SetAttribute(tui_attribute),
                             cursor::MoveTo(0, (i + 3) as u16),
-                            Print(format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                result,
-                                input,
-                                width = output_width,
-                                input_width = input_width
-                            )),
+                            Print(
+                                format!(
+                                    "{}: [{:>width$}] = [{:<input_width$}]",
+                                    label,
+                                    result,
+                                    input,
+                                    width = output_width,
+                                    input_width = input_width
+                                )
+                            ),
                             ResetColor
                         )?;
                     } else {
@@ -524,14 +549,16 @@ fn run_app(
                             buffer,
                             SetForegroundColor(if i >= 17 { Color::Blue } else { tui_color }), // 修改此处为17
                             cursor::MoveTo(0, (i + 3) as u16),
-                            Print(format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                result,
-                                input,
-                                width = output_width,
-                                input_width = input_width
-                            )),
+                            Print(
+                                format!(
+                                    "{}: [{:>width$}] = [{:<input_width$}]",
+                                    label,
+                                    result,
+                                    input,
+                                    width = output_width,
+                                    input_width = input_width
+                                )
+                            ),
                             ResetColor
                         )?;
                     }
@@ -540,24 +567,28 @@ fn run_app(
                 if result == "Error" || (input.starts_with("fc:") && result.is_empty()) {
                     queue!(
                         buffer,
-                        SetForegroundColor(if input.starts_with("fc:") {
-                            Color::Blue
-                        } else {
-                            Color::DarkRed
-                        }),
-                        cursor::MoveTo(0, (i + 3) as u16),
-                        Print(format!(
-                            "{}: [{:>width$}] = [{:<input_width$}]",
-                            label,
+                        SetForegroundColor(
                             if input.starts_with("fc:") {
-                                ""
+                                Color::Blue
                             } else {
-                                result.as_str()
-                            },
-                            input,
-                            width = output_width,
-                            input_width = input_width
-                        )),
+                                Color::DarkRed
+                            }
+                        ),
+                        cursor::MoveTo(0, (i + 3) as u16),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                if input.starts_with("fc:") {
+                                    ""
+                                } else {
+                                    result.as_str()
+                                },
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
                         ResetColor
                     )?;
                 } else {
@@ -565,14 +596,16 @@ fn run_app(
                         buffer,
                         SetForegroundColor(if i >= 17 { Color::Blue } else { Color::Reset }), // 修改此处为17
                         cursor::MoveTo(0, (i + 3) as u16),
-                        Print(format!(
-                            "{}: [{:>width$}] = [{:<input_width$}]",
-                            label,
-                            result,
-                            input,
-                            width = output_width,
-                            input_width = input_width
-                        )),
+                        Print(
+                            format!(
+                                "{}: [{:>width$}] = [{:<input_width$}]",
+                                label,
+                                result,
+                                input,
+                                width = output_width,
+                                input_width = input_width
+                            )
+                        ),
                         ResetColor
                     )?;
                 }
@@ -587,11 +620,7 @@ fn run_app(
         }
 
         let (sum, valid_count) = calculate_sum_and_count(&results);
-        let average = if valid_count > 0 {
-            sum / (valid_count as f64)
-        } else {
-            0.0
-        };
+        let average = if valid_count > 0 { sum / (valid_count as f64) } else { 0.0 };
         queue!(
             buffer,
             cursor::MoveTo(0, (inputs.len() + 4) as u16),
@@ -600,15 +629,9 @@ fn run_app(
             Print(" ".repeat(term_width as usize)),
             SetForegroundColor(Color::Blue),
             cursor::MoveTo(10, (inputs.len() + 4) as u16),
-            Print(format!(
-                "(A - Q) Sum = Z = {}",
-                format_with_thousands_separator(sum)
-            )),
+            Print(format!("(A - Q) Sum = Z = {}", format_with_thousands_separator(sum))),
             cursor::MoveTo(10, (inputs.len() + 5) as u16),
-            Print(format!(
-                "(A - Q) Average = {}",
-                format_with_thousands_separator(average)
-            )),
+            Print(format!("(A - Q) Average = {}", format_with_thousands_separator(average))),
             cursor::MoveTo(0, (inputs.len() + 8) as u16),
             ResetColor,
             SetAttribute(Attribute::Reverse),
@@ -616,10 +639,13 @@ fn run_app(
             ResetColor,
             cursor::MoveTo(19, 26),
             SetForegroundColor(if is_locked { Color::Red } else { Color::Green }),
-            Print(format!(
-                "Status = {} (F4 Status Switch & Align #)",
-                if is_locked { "Locked" } else { "Opened" }
-            )),
+            Print(
+                format!("Status = {} (F4 Status Switch & Align #)", if is_locked {
+                    "Locked"
+                } else {
+                    "Opened"
+                })
+            ),
             ResetColor,
             cursor::MoveTo(0, (inputs.len() + 9) as u16),
             ResetColor
@@ -635,19 +661,11 @@ fn run_app(
             )?;
             show_saved_message = false;
         } else {
-            queue!(
-                buffer,
-                cursor::MoveTo(0, 23),
-                Print(" ".repeat(term_width as usize))
-            )?;
+            queue!(buffer, cursor::MoveTo(0, 23), Print(" ".repeat(term_width as usize)))?;
         }
 
         for (i, line) in additional_lines.iter().enumerate() {
-            queue!(
-                buffer,
-                cursor::MoveTo(0, (inputs.len() + 10 + i) as u16),
-                Print(line)
-            )?;
+            queue!(buffer, cursor::MoveTo(0, (inputs.len() + 10 + i) as u16), Print(line))?;
         }
 
         if is_locked {
@@ -674,526 +692,624 @@ fn run_app(
             current_row,
             current_pos,
             &mut last_row,
-            &mut last_pos,
+            &mut last_pos
         )?;
 
         match event::read()? {
-            Event::Key(KeyEvent {
-                code,
-                modifiers,
-                kind,
-                ..
-            }) => match (code, kind) {
-                (KeyCode::Char('q'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    break;
-                }
-
-                (KeyCode::PageUp, KeyEventKind::Press) => {
-                    if !is_locked {
-                        let input_text = &mut inputs[current_row];
-                        let (number_part, comment_part) = if let Some(pos) = input_text.find('#') {
-                            input_text.split_at(pos)
-                        } else {
-                            (input_text.as_str(), "")
-                        };
-
-                        if let Ok(current_value) = number_part.trim().parse::<f64>() {
-                            let new_value = current_value + step;
-                            let formatted_value = format!("{:.3}", new_value);
-                            let spaces =
-                                " ".repeat(number_part.len() - number_part.trim_end().len());
-                            inputs[current_row] =
-                                format!("{}{}{}", formatted_value, spaces, comment_part);
-                        } else if number_part.trim().is_empty() {
-                            // 保留三位小数
-                            inputs[current_row] = format!("{:.3}{}", step, comment_part);
-                        }
-                        current_pos = inputs[current_row].len();
+            Event::Key(KeyEvent { code, modifiers, kind, .. }) =>
+                match (code, kind) {
+                    (KeyCode::Char('q'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        break;
                     }
-                }
-                (KeyCode::PageDown, KeyEventKind::Press) => {
-                    if !is_locked {
-                        let input_text = &mut inputs[current_row];
-                        let (number_part, comment_part) = if let Some(pos) = input_text.find('#') {
-                            input_text.split_at(pos)
-                        } else {
-                            (input_text.as_str(), "")
-                        };
 
-                        if let Ok(current_value) = number_part.trim().parse::<f64>() {
-                            let new_value = (current_value - step).max(0.0);
-                            // 保留三位小数
-                            let formatted_value = format!("{:.3}", new_value);
-                            let spaces =
-                                " ".repeat(number_part.len() - number_part.trim_end().len());
-                            inputs[current_row] =
-                                format!("{}{}{}", formatted_value, spaces, comment_part);
-                        } else if number_part.trim().is_empty() {
-                            inputs[current_row] = format!("0.000{}", comment_part);
-                        }
-                        current_pos = inputs[current_row].len();
-                    }
-                }
+                    (KeyCode::PageUp, KeyEventKind::Press) => {
+                        if !is_locked {
+                            let input_text = &mut inputs[current_row];
+                            let (number_part, comment_part) = if
+                                let Some(pos) = input_text.find('#')
+                            {
+                                input_text.split_at(pos)
+                            } else {
+                                (input_text.as_str(), "")
+                            };
 
-                (KeyCode::Left, KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    handle_page_up(
-                        current_section.clone(),
-                        func_map,
-                        inputs,
-                        func_toml_path,
-                        &mut current_row,
-                        &mut current_pos,
-                    );
-                    clear_undo_stack(&undo_stack);
-                }
-                (KeyCode::Right, KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    handle_page_down(
-                        current_section.clone(),
-                        func_map,
-                        inputs,
-                        func_toml_path,
-                        &mut current_row,
-                        &mut current_pos,
-                    );
-                    clear_undo_stack(&undo_stack);
-                }
-
-                (KeyCode::Char('g'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !inputs[current_row].trim().is_empty() {
-                        for i in 0..inputs.len() {
-                            let next_index = (current_row + i) % inputs.len();
-                            if inputs[next_index].trim().is_empty() {
-                                current_row = next_index;
-                                current_pos = 0;
-                                break;
+                            if let Ok(current_value) = number_part.trim().parse::<f64>() {
+                                let new_value = current_value + step;
+                                let formatted_value = format!("{:.3}", new_value);
+                                let spaces = " ".repeat(
+                                    number_part.len() - number_part.trim_end().len()
+                                );
+                                inputs[current_row] = format!(
+                                    "{}{}{}",
+                                    formatted_value,
+                                    spaces,
+                                    comment_part
+                                );
+                            } else if number_part.trim().is_empty() {
+                                // 保留三位小数
+                                inputs[current_row] = format!("{:.3}{}", step, comment_part);
                             }
-                        }
-                    }
-                }
-
-                (KeyCode::Char('f'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        move_cursor_to_next_word(&inputs, &mut current_row, &mut current_pos);
-                    }
-                }
-
-                (KeyCode::Tab, key_event_kind)
-                    if (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release)
-                        || (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press) =>
-                {
-                    jump_to_input_box(&mut stdout, &inputs, &mut current_row, &mut current_pos)?;
-                }
-
-                (KeyCode::F(4), KeyEventKind::Press) => {
-                    let mut lock_state_guard = lock_state.write().unwrap();
-                    *lock_state_guard = !*lock_state_guard;
-                    if *lock_state_guard {
-                        queue!(stdout, cursor::Hide)?;
-                    } else {
-                        queue!(stdout, cursor::Show)?;
-                        // 调用 align_hash_comments 函数对齐所有输入框中的 `#`
-                        align_hash_comments(inputs, &mut current_row, &mut current_pos);
-                    }
-                }
-                (KeyCode::F(9), KeyEventKind::Press) => {
-                    remove_spaces_before_hash(inputs, &mut current_row, &mut current_pos);
-                }
-                (KeyCode::Char('u'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        push_undo_stack(&undo_stack, &inputs);
-                        for input in inputs.iter_mut().take(17) {
-                            // 修改此处为17
-                            input.clear();
-                        }
-                        for label in (b'A'..=b'T').map(|c| (c as char).to_string()) {
-                            // 修改此处为T
-                            variables.remove(&label);
-                        }
-                        current_pos = 0;
-                        current_row = 0;
-                    }
-                }
-                (KeyCode::Char('l'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        push_undo_stack(&undo_stack, &inputs);
-                        let label = (b'A' + (current_row as u8)) as char;
-                        inputs[current_row].clear();
-                        variables.remove(&label.to_string());
-                        current_pos = 0;
-                    }
-                }
-                (KeyCode::Char('z'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
-                    }
-                }
-                (KeyCode::Home, KeyEventKind::Press) => {
-                    if !is_locked {
-                        *current_section.write().unwrap() = "home".to_string();
-                        load_section("home", inputs, func_toml_path);
-                        current_pos = 0;
-                        current_row = 0;
-                        clear_undo_stack(&undo_stack);
-                    }
-                }
-
-                (KeyCode::Char('s'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    save_inputs_to_file(
-                        filename,
-                        inputs,
-                        additional_lines,
-                        &current_section.read().unwrap(),
-                    )?;
-                    show_saved_message = true;
-                    queue!(
-                        buffer,
-                        Clear(ClearType::All),
-                        cursor::MoveTo(0, 0),
-                        Print(title)
-                    )?;
-                    variables.clear();
-                    for (i, input) in inputs.iter().enumerate() {
-                        let label = (b'A' + (i as u8)) as char;
-                        if !input.trim().is_empty() {
-                            match evaluate_and_solve(input, &variables, i) {
-                                Ok(res) => {
-                                    variables.insert(label.to_string(), res);
-                                }
-                                Err(_) => {}
-                            }
-                        }
-                    }
-                }
-                (KeyCode::F(8), KeyEventKind::Press) => {
-                    if !is_locked {
-                        create_and_load_new_section(&current_section, inputs, func_toml_path, true)
-                            .unwrap();
-                        current_pos = 0;
-                        current_row = 0;
-                    }
-                }
-		
-		// Windows 平台独有快捷键, 关于剪切版的操作
-		#[cfg(target_os = "windows")]
-                (KeyCode::Char('c'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if current_row < inputs.len() {
-                        let clipboard_value =
-                            evaluate_and_solve(&inputs[current_row], &variables, current_row)
-                                .unwrap_or_else(|_| "Error".to_string());
-                        if clipboard_value != "Error" {
-                            let mut clipboard = Clipboard::new().unwrap();
-                            clipboard.set_text(clipboard_value).unwrap();
-
-                            // 光标闪烁提示复制完成
-                            execute!(stdout, cursor::Hide).unwrap();
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-                            execute!(stdout, cursor::Show).unwrap();
-                        }
-                    }
-                }
-
-                (KeyCode::Char('t'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        current_row = 0;
-                        current_pos = inputs[current_row].len();
-                    }
-                }
-                (KeyCode::Char('d'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        // 先格式化当前输入框内容
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-
-                        // 如果当前行不在最后一行，则将当前行内容复制到下一行并跳转到下一行
-                        if current_row < inputs.len() - 1 {
-                            inputs[current_row + 1] = inputs[current_row].clone();
-                            current_row += 1;
                             current_pos = inputs[current_row].len();
                         }
                     }
-                }
-                (KeyCode::Char('a'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked && current_pos > 0 {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_pos = 0;
+                    (KeyCode::PageDown, KeyEventKind::Press) => {
+                        if !is_locked {
+                            let input_text = &mut inputs[current_row];
+                            let (number_part, comment_part) = if
+                                let Some(pos) = input_text.find('#')
+                            {
+                                input_text.split_at(pos)
+                            } else {
+                                (input_text.as_str(), "")
+                            };
+
+                            if let Ok(current_value) = number_part.trim().parse::<f64>() {
+                                let new_value = (current_value - step).max(0.0);
+                                // 保留三位小数
+                                let formatted_value = format!("{:.3}", new_value);
+                                let spaces = " ".repeat(
+                                    number_part.len() - number_part.trim_end().len()
+                                );
+                                inputs[current_row] = format!(
+                                    "{}{}{}",
+                                    formatted_value,
+                                    spaces,
+                                    comment_part
+                                );
+                            } else if number_part.trim().is_empty() {
+                                inputs[current_row] = format!("0.000{}", comment_part);
+                            }
+                            current_pos = inputs[current_row].len();
+                        }
                     }
-                }
-                (KeyCode::Char('b'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_row = inputs.len() - 1;
-                        current_pos = inputs[current_row].len();
+
+                    (KeyCode::Left, KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        handle_page_up(
+                            current_section.clone(),
+                            func_map,
+                            inputs,
+                            func_toml_path,
+                            &mut current_row,
+                            &mut current_pos
+                        );
+                        clear_undo_stack(&undo_stack);
                     }
-                }
-                (KeyCode::Char('e'), KeyEventKind::Press)
-                    if modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    if !is_locked {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_pos = inputs[current_row].len();
+                    (KeyCode::Right, KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        handle_page_down(
+                            current_section.clone(),
+                            func_map,
+                            inputs,
+                            func_toml_path,
+                            &mut current_row,
+                            &mut current_pos
+                        );
+                        clear_undo_stack(&undo_stack);
                     }
-                }
-                (KeyCode::Down, KeyEventKind::Press) => {
-                    if !is_locked && current_row < inputs.len() - 1 {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_row += 1;
-                        current_pos = inputs[current_row].len();
-                    }
-                }
-                (KeyCode::Up, KeyEventKind::Press) => {
-                    if !is_locked && current_row > 0 {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_row -= 1;
-                        current_pos = inputs[current_row].len();
-                    }
-                }
-                (KeyCode::Left, KeyEventKind::Press) => {
-                    if !is_locked && current_pos > 0 {
-                        current_pos -= 1;
-                    }
-                }
-                (KeyCode::Right, KeyEventKind::Press) => {
-                    if !is_locked && current_pos < inputs[current_row].len() {
-                        current_pos += 1;
-                    }
-                }
-                (KeyCode::Backspace, KeyEventKind::Press) => {
-                    if !is_locked && current_pos > 0 {
-                        push_undo_stack(&undo_stack, &inputs);
-                        inputs[current_row].remove(current_pos - 1);
-                        current_pos -= 1;
-                    }
-                }
-                (KeyCode::Delete, KeyEventKind::Press) => {
-                    if !is_locked && current_pos < inputs[current_row].len() {
-                        push_undo_stack(&undo_stack, &inputs);
-                        inputs[current_row].remove(current_pos);
-                    }
-                }
-                (KeyCode::Enter, KeyEventKind::Press) => {
-                    if !is_locked {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        let input_command = inputs[current_row].clone().to_lowercase();
-                        if input_command.starts_with("rename ") {
-                            let new_section_name = input_command
-                                .split_whitespace()
-                                .nth(1)
-                                .unwrap_or("")
-                                .to_string();
-                            if !new_section_name.is_empty() {
-                                let current_section_name = current_section.read().unwrap().clone();
-                                if rename_section_in_file(
-                                    &current_section_name,
-                                    &new_section_name,
-                                    func_toml_path,
-                                )
-                                .is_ok()
-                                {
-                                    *current_section.write().unwrap() = new_section_name.clone();
-                                    load_section(&new_section_name, inputs, func_toml_path);
+
+                    (KeyCode::Char('g'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !inputs[current_row].trim().is_empty() {
+                            for i in 0..inputs.len() {
+                                let next_index = (current_row + i) % inputs.len();
+                                if inputs[next_index].trim().is_empty() {
+                                    current_row = next_index;
                                     current_pos = 0;
-                                    current_row = 0;
-                                } else {
-                                    inputs[current_row].clear();
-                                    inputs[current_row].push_str("Failed to rename section.");
-                                    current_pos = inputs[current_row].len();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    (KeyCode::Char('f'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            move_cursor_to_next_word(&inputs, &mut current_row, &mut current_pos);
+                        }
+                    }
+
+                    (KeyCode::Tab, key_event_kind) if
+                        (cfg!(target_os = "windows") && key_event_kind == KeyEventKind::Release) ||
+                        (cfg!(target_os = "linux") && key_event_kind == KeyEventKind::Press)
+                    => {
+                        jump_to_input_box(
+                            &mut stdout,
+                            &inputs,
+                            &mut current_row,
+                            &mut current_pos
+                        )?;
+                    }
+
+                    (KeyCode::F(4), KeyEventKind::Press) => {
+                        let mut lock_state_guard = lock_state.write().unwrap();
+                        *lock_state_guard = !*lock_state_guard;
+                        if *lock_state_guard {
+                            queue!(stdout, cursor::Hide)?;
+                        } else {
+                            queue!(stdout, cursor::Show)?;
+                            // 调用 align_hash_comments 函数对齐所有输入框中的 `#`
+                            align_hash_comments(inputs, &mut current_row, &mut current_pos);
+                        }
+                    }
+                    (KeyCode::F(9), KeyEventKind::Press) => {
+                        remove_spaces_before_hash(inputs, &mut current_row, &mut current_pos);
+                    }
+                    (KeyCode::Char('u'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            push_undo_stack(&undo_stack, &inputs);
+                            for input in inputs.iter_mut().take(17) {
+                                // 修改此处为17
+                                input.clear();
+                            }
+                            for label in (b'A'..=b'T').map(|c| (c as char).to_string()) {
+                                // 修改此处为T
+                                variables.remove(&label);
+                            }
+                            current_pos = 0;
+                            current_row = 0;
+                        }
+                    }
+
+                    (KeyCode::F(12), KeyEventKind::Press) => {
+                        if !is_locked {
+                            let exe_path = env::current_exe().unwrap();
+                            let exe_dir = exe_path.parent().unwrap();
+                            let import_txt_path = exe_dir.join(".import.txt");
+
+                            if import_txt_path.exists() {
+                                match fs::read_to_string(import_txt_path) {
+                                    Ok(content) => {
+                                        // 清空当前 section 的前 17 行
+                                        for input in inputs.iter_mut().take(17) {
+                                            input.clear();
+                                        }
+
+                                        // 将 .import.txt 的内容写入当前 section 的前 17 行
+                                        let lines: Vec<&str> = content.lines().take(17).collect(); // 只取前17行
+                                        for (i, line) in lines.iter().enumerate() {
+                                            inputs[i] = line.to_string();
+                                        }
+                                        current_pos = inputs[current_row].len();
+                                    }
+                                    Err(e) => {
+                                        inputs[current_row].clear();
+                                        inputs[current_row].push_str(
+                                            &format!("Failed to read .import.txt: {}", e)
+                                        );
+                                        current_pos = inputs[current_row].len();
+                                    }
                                 }
                             } else {
                                 inputs[current_row].clear();
-                                inputs[current_row].push_str("Invalid new section name.");
+                                inputs[current_row].push_str(
+                                    ".import.txt does not exist in the current directory."
+                                );
                                 current_pos = inputs[current_row].len();
                             }
-                        } else if input_command == "new" {
-                            create_and_load_new_section(
-                                &current_section,
-                                inputs,
-                                func_toml_path,
-                                false,
-                            )
-                            .unwrap();
+                        }
+                    }
+
+                    (KeyCode::Char('l'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            push_undo_stack(&undo_stack, &inputs);
+                            let label = (b'A' + (current_row as u8)) as char;
+                            inputs[current_row].clear();
+                            variables.remove(&label.to_string());
                             current_pos = 0;
-                            current_row = 0;
-                        } else if input_command == "delete" || input_command == "del" {
-                            let current_section_name = current_section.read().unwrap().clone();
-                            delete_section_from_file(&current_section_name, func_toml_path)
-                                .unwrap();
+                        }
+                    }
+                    (KeyCode::Char('z'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            undo(&undo_stack, inputs, &mut current_row, &mut current_pos);
+                        }
+                    }
+                    (KeyCode::Home, KeyEventKind::Press) => {
+                        if !is_locked {
                             *current_section.write().unwrap() = "home".to_string();
                             load_section("home", inputs, func_toml_path);
                             current_pos = 0;
                             current_row = 0;
-                        } else if input_command == "clone" {
+                            clear_undo_stack(&undo_stack);
+                        }
+                    }
+
+                    (KeyCode::Char('s'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        save_inputs_to_file(
+                            filename,
+                            inputs,
+                            additional_lines,
+                            &current_section.read().unwrap()
+                        )?;
+                        show_saved_message = true;
+                        queue!(buffer, Clear(ClearType::All), cursor::MoveTo(0, 0), Print(title))?;
+                        variables.clear();
+                        for (i, input) in inputs.iter().enumerate() {
+                            let label = (b'A' + (i as u8)) as char;
+                            if !input.trim().is_empty() {
+                                match evaluate_and_solve(input, &variables, i) {
+                                    Ok(res) => {
+                                        variables.insert(label.to_string(), res);
+                                    }
+                                    Err(_) => {}
+                                }
+                            }
+                        }
+                    }
+                    (KeyCode::F(8), KeyEventKind::Press) => {
+                        if !is_locked {
                             create_and_load_new_section(
                                 &current_section,
                                 inputs,
                                 func_toml_path,
-                                true,
-                            )
-                            .unwrap();
+                                true
+                            ).unwrap();
                             current_pos = 0;
                             current_row = 0;
-                        } else if input_command.starts_with("fc:")
-                            && handle_fc_command(&input_command, inputs, func_map, func_toml_path)
-                        {
-                            current_pos = inputs[current_row].len();
-                            *current_section.write().unwrap() = input_command[3..].to_string();
-                        } else if handle_const_command(
-                            &input_command,
-                            inputs,
-                            const_map,
-                            current_row,
-                        ) {
-                            current_pos = inputs[current_row].len();
-                        } else if input_command == "clear" || input_command == "cls" {
-                            if !is_locked {
-                                for input in inputs.iter_mut().take(20) {
-                                    input.clear();
-                                }
-                                current_pos = 0;
-                                current_row = 0;
+                        }
+                    }
+
+                    // Windows 平台独有快捷键, 关于剪切版的操作
+                    #[cfg(target_os = "windows")]
+                    (KeyCode::Char('c'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if current_row < inputs.len() {
+                            let clipboard_value = evaluate_and_solve(
+                                &inputs[current_row],
+                                &variables,
+                                current_row
+                            ).unwrap_or_else(|_| "Error".to_string());
+                            if clipboard_value != "Error" {
+                                let mut clipboard = Clipboard::new().unwrap();
+                                clipboard.set_text(clipboard_value).unwrap();
+
+                                // 光标闪烁提示复制完成
+                                execute!(stdout, cursor::Hide).unwrap();
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                                execute!(stdout, cursor::Show).unwrap();
                             }
-                        } else if input_command == "rate" {
-                            inputs[current_row].clear();
-                            let exe_path = env::current_exe().unwrap();
-                            let exe_dir = exe_path.parent().unwrap();
-                            let command_path = if cfg!(target_os = "windows") {
-                                exe_dir.join("rate.exe")
-                            } else {
-                                exe_dir.join("./rate")
-                            };
-                            let output = std::process::Command::new(command_path).output();
-                            match output {
-                                Ok(output) => {
-                                    let result = String::from_utf8_lossy(&output.stdout);
-                                    let trimmed_result = result.trim();
-                                    inputs[current_row].push_str(trimmed_result);
-                                }
-                                Err(_) => {
-                                    inputs[current_row].push_str("The rate command was not found!");
-                                }
-                            }
-                            current_pos = inputs[current_row].len();
-                        } else if input_command.starts_with("s:") {
-                            let command = &input_command[2..].trim();
-                            match execute_qalc_command(command) {
-                                Ok(result) => {
-                                    inputs[current_row] = result;
-                                }
-                                Err(err) => {
-                                    inputs[current_row] = err;
-                                }
-                            }
-                            current_pos = inputs[current_row].len();
-                        } else {
-                            current_row = (current_row + 1) % inputs.len();
+                        }
+                    }
+
+                    (KeyCode::Char('t'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            current_row = 0;
                             current_pos = inputs[current_row].len();
                         }
                     }
-                }
+                    (KeyCode::Char('d'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            // 先格式化当前输入框内容
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
 
-                (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
-                    if inputs[current_row].len() < input_width {
-                        if (c == 'Z' || c == 'z') && current_row <= 16 {
-                            // 修改此处为16
-                            inputs[current_row].clear();
-                            inputs[current_row]
-                                .push_str("# Global variable Z is limited to the R ~ T area only");
-                        // 修改此处为Q-T
-                        } else {
-                            push_undo_stack(&undo_stack, &inputs);
-                            inputs[current_row].insert(current_pos, c);
+                            // 如果当前行不在最后一行，则将当前行内容复制到下一行并跳转到下一行
+                            if current_row < inputs.len() - 1 {
+                                inputs[current_row + 1] = inputs[current_row].clone();
+                                current_row += 1;
+                                current_pos = inputs[current_row].len();
+                            }
+                        }
+                    }
+                    (KeyCode::Char('a'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked && current_pos > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_pos = 0;
+                        }
+                    }
+                    (KeyCode::Char('b'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_row = inputs.len() - 1;
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::Char('e'), KeyEventKind::Press) if
+                        modifiers.contains(KeyModifiers::CONTROL)
+                    => {
+                        if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::Down, KeyEventKind::Press) => {
+                        if !is_locked && current_row < inputs.len() - 1 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_row += 1;
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::Up, KeyEventKind::Press) => {
+                        if !is_locked && current_row > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_row -= 1;
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    (KeyCode::Left, KeyEventKind::Press) => {
+                        if !is_locked && current_pos > 0 {
+                            current_pos -= 1;
+                        }
+                    }
+                    (KeyCode::Right, KeyEventKind::Press) => {
+                        if !is_locked && current_pos < inputs[current_row].len() {
                             current_pos += 1;
                         }
                     }
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent {
-                kind, column, row, ..
-            }) => match kind {
-                MouseEventKind::Down(MouseButton::Left) => {
-                    if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        let clicked_row = (row as usize) - 3;
-                        current_row = clicked_row;
-                        current_pos = (column as usize) - (output_width + 9);
-                        if current_pos > inputs[current_row].len() {
-                            current_pos = inputs[current_row].len();
+                    (KeyCode::Backspace, KeyEventKind::Press) => {
+                        if !is_locked && current_pos > 0 {
+                            push_undo_stack(&undo_stack, &inputs);
+                            inputs[current_row].remove(current_pos - 1);
+                            current_pos -= 1;
                         }
-                        let label = (b'A' + (current_row as u8)) as char;
-                        let result = if inputs[current_row].trim().is_empty() {
-                            "".to_string()
-                        } else {
-                            match evaluate_and_solve(&inputs[current_row], &variables, current_row)
-                            {
-                                Ok(res) => {
-                                    if res.len() <= output_width - 3 {
-                                        res
+                    }
+                    (KeyCode::Delete, KeyEventKind::Press) => {
+                        if !is_locked && current_pos < inputs[current_row].len() {
+                            push_undo_stack(&undo_stack, &inputs);
+                            inputs[current_row].remove(current_pos);
+                        }
+                    }
+                    (KeyCode::Enter, KeyEventKind::Press) => {
+                        if !is_locked {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            let input_command = inputs[current_row].clone().to_lowercase();
+                            if input_command.starts_with("rename ") {
+                                let new_section_name = input_command
+                                    .split_whitespace()
+                                    .nth(1)
+                                    .unwrap_or("")
+                                    .to_string();
+                                if !new_section_name.is_empty() {
+                                    let current_section_name = current_section
+                                        .read()
+                                        .unwrap()
+                                        .clone();
+                                    if
+                                        rename_section_in_file(
+                                            &current_section_name,
+                                            &new_section_name,
+                                            func_toml_path
+                                        ).is_ok()
+                                    {
+                                        *current_section.write().unwrap() =
+                                            new_section_name.clone();
+                                        load_section(&new_section_name, inputs, func_toml_path);
+                                        current_pos = 0;
+                                        current_row = 0;
                                     } else {
-                                        "Error".to_string()
+                                        inputs[current_row].clear();
+                                        inputs[current_row].push_str("Failed to rename section.");
+                                        current_pos = inputs[current_row].len();
+                                    }
+                                } else {
+                                    inputs[current_row].clear();
+                                    inputs[current_row].push_str("Invalid new section name.");
+                                    current_pos = inputs[current_row].len();
+                                }
+                            } else if input_command == "new" {
+                                create_and_load_new_section(
+                                    &current_section,
+                                    inputs,
+                                    func_toml_path,
+                                    false
+                                ).unwrap();
+                                current_pos = 0;
+                                current_row = 0;
+                            } else if input_command == "delete" || input_command == "del" {
+                                let current_section_name = current_section.read().unwrap().clone();
+                                delete_section_from_file(
+                                    &current_section_name,
+                                    func_toml_path
+                                ).unwrap();
+                                *current_section.write().unwrap() = "home".to_string();
+                                load_section("home", inputs, func_toml_path);
+                                current_pos = 0;
+                                current_row = 0;
+                            } else if input_command == "clone" {
+                                create_and_load_new_section(
+                                    &current_section,
+                                    inputs,
+                                    func_toml_path,
+                                    true
+                                ).unwrap();
+                                current_pos = 0;
+                                current_row = 0;
+                            } else if
+                                input_command.starts_with("fc:") &&
+                                handle_fc_command(&input_command, inputs, func_map, func_toml_path)
+                            {
+                                current_pos = inputs[current_row].len();
+                                *current_section.write().unwrap() = input_command[3..].to_string();
+                            } else if
+                                handle_const_command(&input_command, inputs, const_map, current_row)
+                            {
+                                current_pos = inputs[current_row].len();
+                            } else if input_command == "clear" || input_command == "cls" {
+                                if !is_locked {
+                                    for input in inputs.iter_mut().take(20) {
+                                        input.clear();
+                                    }
+                                    current_pos = 0;
+                                    current_row = 0;
+                                }
+                            } else if cfg!(target_os = "windows") && input_command == "set" {
+                                // 获取当前可执行文件所在的目录
+                                let exe_path = env::current_exe().unwrap();
+                                let exe_dir = exe_path.parent().unwrap();
+
+                                // 设置 notepad3.exe 的路径，位于子目录 notepad3 中
+                                let notepad3_path = exe_dir.join("notepad3").join("notepad3.exe");
+
+                                // 设置 .import.txt 的路径，位于当前目录
+                                let toml_path = exe_dir.join(".import.txt");
+
+                                // 启动 notepad3.exe 并打开 .import.txt
+                                let output = std::process::Command
+                                    ::new(notepad3_path)
+                                    .arg(toml_path) // 使用当前目录下的 .import.txt
+                                    .spawn(); // 非阻塞启动
+
+                                match output {
+                                    Ok(_) => {
+                                        // inputs[current_row].clear();
+                                        // inputs[current_row].push_str("notepad3.exe started successfully!");
+                                        inputs[current_row].clear();
+                                    }
+                                    Err(_) => {
+                                        inputs[current_row].clear();
+                                        inputs[current_row].push_str(
+                                            "Failed to start notepad3/notepad3.exe!"
+                                        );
                                     }
                                 }
-                                Err(_) => "Error".to_string(),
+                                current_pos = inputs[current_row].len();
+                            } else if input_command == "rate" {
+                                inputs[current_row].clear();
+                                let exe_path = env::current_exe().unwrap();
+                                let exe_dir = exe_path.parent().unwrap();
+                                let command_path = if cfg!(target_os = "windows") {
+                                    exe_dir.join("rate.exe")
+                                } else {
+                                    exe_dir.join("./rate")
+                                };
+                                let output = std::process::Command::new(command_path).output();
+                                match output {
+                                    Ok(output) => {
+                                        let result = String::from_utf8_lossy(&output.stdout);
+                                        let trimmed_result = result.trim();
+                                        inputs[current_row].push_str(trimmed_result);
+                                    }
+                                    Err(_) => {
+                                        inputs[current_row].push_str(
+                                            "The rate command was not found!"
+                                        );
+                                    }
+                                }
+                                current_pos = inputs[current_row].len();
+                            } else if input_command.starts_with("s:") {
+                                let command = &input_command[2..].trim();
+                                match execute_qalc_command(command) {
+                                    Ok(result) => {
+                                        inputs[current_row] = result;
+                                    }
+                                    Err(err) => {
+                                        inputs[current_row] = err;
+                                    }
+                                }
+                                current_pos = inputs[current_row].len();
+                            } else {
+                                current_row = (current_row + 1) % inputs.len();
+                                current_pos = inputs[current_row].len();
                             }
-                        };
-                        queue!(
-                            buffer,
-                            cursor::MoveTo(0, (current_row + 3) as u16),
-                            Print(format!(
-                                "{}: [{:>width$}] = [{:<input_width$}]",
-                                label,
-                                result,
-                                inputs[current_row],
-                                width = output_width,
-                                input_width = input_width
-                            ))
-                        )?;
-                        stdout.write_all(&buffer)?;
-                        stdout.flush()?;
+                        }
                     }
-                }
-                MouseEventKind::ScrollDown => {
-                    if !is_locked && current_row + 1 < inputs.len() {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_row += 1;
-                        current_pos = inputs[current_row].len();
+
+                    (KeyCode::Char(c), KeyEventKind::Press) if !is_locked && c.is_ascii() => {
+                        if inputs[current_row].len() < input_width {
+                            if (c == 'Z' || c == 'z') && current_row <= 16 {
+                                // 修改此处为16
+                                inputs[current_row].clear();
+                                inputs[current_row].push_str(
+                                    "# Global variable Z is limited to the R ~ T area only"
+                                );
+                                // 修改此处为Q-T
+                            } else {
+                                push_undo_stack(&undo_stack, &inputs);
+                                inputs[current_row].insert(current_pos, c);
+                                current_pos += 1;
+                            }
+                        }
                     }
+                    _ => {}
                 }
-                MouseEventKind::ScrollUp => {
-                    if !is_locked && current_row > 0 {
-                        inputs[current_row] = format_math_expression(&inputs[current_row]);
-                        current_row -= 1;
-                        current_pos = inputs[current_row].len();
+            Event::Mouse(MouseEvent { kind, column, row, .. }) =>
+                match kind {
+                    MouseEventKind::Down(MouseButton::Left) => {
+                        if !is_locked && (3..inputs.len() + 3).contains(&(row as usize)) {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            let clicked_row = (row as usize) - 3;
+                            current_row = clicked_row;
+                            current_pos = (column as usize) - (output_width + 9);
+                            if current_pos > inputs[current_row].len() {
+                                current_pos = inputs[current_row].len();
+                            }
+                            let label = (b'A' + (current_row as u8)) as char;
+                            let result = if inputs[current_row].trim().is_empty() {
+                                "".to_string()
+                            } else {
+                                match
+                                    evaluate_and_solve(
+                                        &inputs[current_row],
+                                        &variables,
+                                        current_row
+                                    )
+                                {
+                                    Ok(res) => {
+                                        if res.len() <= output_width - 3 {
+                                            res
+                                        } else {
+                                            "Error".to_string()
+                                        }
+                                    }
+                                    Err(_) => "Error".to_string(),
+                                }
+                            };
+                            queue!(
+                                buffer,
+                                cursor::MoveTo(0, (current_row + 3) as u16),
+                                Print(
+                                    format!(
+                                        "{}: [{:>width$}] = [{:<input_width$}]",
+                                        label,
+                                        result,
+                                        inputs[current_row],
+                                        width = output_width,
+                                        input_width = input_width
+                                    )
+                                )
+                            )?;
+                            stdout.write_all(&buffer)?;
+                            stdout.flush()?;
+                        }
                     }
+                    MouseEventKind::ScrollDown => {
+                        if !is_locked && current_row + 1 < inputs.len() {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_row += 1;
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    MouseEventKind::ScrollUp => {
+                        if !is_locked && current_row > 0 {
+                            inputs[current_row] = format_math_expression(&inputs[current_row]);
+                            current_row -= 1;
+                            current_pos = inputs[current_row].len();
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
             _ => {}
         }
     };
@@ -1209,7 +1325,7 @@ fn display_current_position(
     current_row: usize,
     current_pos: usize,
     last_row: &mut Option<usize>,
-    last_pos: &mut Option<usize>,
+    last_pos: &mut Option<usize>
 ) -> io::Result<()> {
     // 只有当行号或列号发生变化时才更新显示
     if Some(current_row) != *last_row || Some(current_pos) != *last_pos {
@@ -1242,7 +1358,8 @@ fn display_current_position(
 /// 从指定文件读取输入数据
 fn read_inputs_from_file(filename: &Path) -> Result<(Vec<String>, Vec<String>), io::Error> {
     if !filename.exists() || fs::metadata(filename)?.len() == 0 {
-        let initial_content = r#"
+        let initial_content =
+            r#"
 [home]
 A = ""
 B = ""
@@ -1274,7 +1391,8 @@ R0 = ""
     }
 
     let mut content = fs::read_to_string(filename)?;
-    let mut value: Value = toml::from_str(&content)
+    let mut value: Value = toml
+        ::from_str(&content)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     if let Value::Table(ref mut table) = value {
@@ -1302,13 +1420,15 @@ R0 = ""
             initial_0_section.insert("T".to_string(), Value::String("".to_string()));
 
             table.insert("home".to_string(), Value::Table(initial_0_section));
-            content = toml::to_string(&value)
+            content = toml
+                ::to_string(&value)
                 .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
             fs::write(filename, content.clone())?;
         }
     }
 
-    let value: Value = toml::from_str(&content)
+    let value: Value = toml
+        ::from_str(&content)
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
     let mut inputs = vec!["".to_string(); 20]; // 修改此处为20
     let mut additional_lines = vec![];
@@ -1363,7 +1483,7 @@ fn save_inputs_to_file(
     filename: &Path,
     inputs: &[String],
     _additional_lines: &[String],
-    section: &str,
+    section: &str
 ) -> Result<(), io::Error> {
     let mut value = if filename.exists() {
         let content = fs::read_to_string(filename)?;
@@ -1390,8 +1510,7 @@ fn save_inputs_to_file(
         table.insert(section.to_string(), input_table);
     }
 
-    let toml_string =
-        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(filename, toml_string)?;
     Ok(())
 }
@@ -1400,7 +1519,7 @@ fn save_inputs_to_file(
 fn evaluate_and_solve(
     input: &str,
     variables: &HashMap<String, String>,
-    current_row: usize,
+    current_row: usize
 ) -> Result<String, String> {
     if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
         return Ok("home".to_string());
@@ -1451,8 +1570,7 @@ fn evaluate_and_solve(
             };
             if coefficient == 0.0 {
                 return Err(
-                    "Invalid equation: coefficient of x is zero or not a linear equation"
-                        .to_string(),
+                    "Invalid equation: coefficient of x is zero or not a linear equation".to_string()
                 );
             }
             let result = (rhs_value - lhs_value) / coefficient;
@@ -1488,8 +1606,9 @@ fn evaluate_and_solve(
 
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
-                let formatted_result =
-                    format_with_thousands_separator(result.as_number().unwrap_or(0.0));
+                let formatted_result = format_with_thousands_separator(
+                    result.as_number().unwrap_or(0.0)
+                );
                 Ok(formatted_result)
             }
             Err(_) => Err("Invalid mathematical expression.".to_string()),
@@ -1560,7 +1679,8 @@ fn format_with_thousands_separator(value: f64) -> String {
     if value.fract() == 0.0 {
         // 如果是整数，直接返回整数部分
         let formatted_int = format!("{}", value.trunc() as i64); // 转换为整数形式
-        return formatted_int.chars()
+        return formatted_int
+            .chars()
             .rev()
             .collect::<Vec<_>>()
             .chunks(3)
@@ -1583,7 +1703,8 @@ fn format_with_thousands_separator(value: f64) -> String {
 
     // 如果没有小数位，返回整数部分
     if dec_part_trimmed.is_empty() {
-        return int_part.chars()
+        return int_part
+            .chars()
             .rev()
             .collect::<Vec<_>>()
             .chunks(3)
@@ -1662,12 +1783,15 @@ fn load_section(section: &str, inputs: &mut Vec<String>, func_toml_path: &Path) 
 fn get_next_section(
     func_map: &HashMap<String, HashMap<String, String>>,
     current_section: &str,
-    reverse: bool,
+    reverse: bool
 ) -> String {
     let mut keys: Vec<String> = func_map.keys().cloned().collect();
     keys.retain(|k| k != "tui" && k != "remarks" && k != "const");
     keys.sort();
-    let current_index = keys.iter().position(|k| k == current_section).unwrap_or(0);
+    let current_index = keys
+        .iter()
+        .position(|k| k == current_section)
+        .unwrap_or(0);
 
     if reverse {
         if current_index == 0 {
@@ -1691,11 +1815,12 @@ fn handle_page_up(
     inputs: &mut Vec<String>,
     func_toml_path: &Path,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) {
     // 重新加载 .func.toml 文件
-    if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
-        load_func_commands_from_file(func_toml_path)
+    if
+        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
+            load_func_commands_from_file(func_toml_path)
     {
         *func_map = new_func_map;
     } else {
@@ -1723,11 +1848,12 @@ fn handle_page_down(
     inputs: &mut Vec<String>,
     func_toml_path: &Path,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) {
     // 重新加载 .func.toml 文件
-    if let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
-        load_func_commands_from_file(func_toml_path)
+    if
+        let Ok((new_func_map, _new_const_map, _custom_color, _custom_attribute, _)) =
+            load_func_commands_from_file(func_toml_path)
     {
         *func_map = new_func_map;
     } else {
@@ -1754,15 +1880,9 @@ fn execute_qalc_command(command: &str) -> Result<String, String> {
         let exe_path = env::current_exe().unwrap();
         let exe_dir = exe_path.parent().unwrap();
         let command_path = exe_dir.join("qalc/qalc.exe");
-        std::process::Command::new(command_path)
-            .arg("-t")
-            .arg(command)
-            .output()
+        std::process::Command::new(command_path).arg("-t").arg(command).output()
     } else {
-        std::process::Command::new("qalc")
-            .arg("-t")
-            .arg(command)
-            .output()
+        std::process::Command::new("qalc").arg("-t").arg(command).output()
     };
 
     match output {
@@ -1788,7 +1908,7 @@ fn undo(
     undo_stack: &Arc<RwLock<Vec<Vec<String>>>>,
     inputs: &mut Vec<String>,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) {
     let mut stack = undo_stack.write().unwrap();
     if let Some(last_state) = stack.pop() {
@@ -1831,19 +1951,34 @@ fn add_new_section_to_file(section_name: &str, func_toml_path: &Path) -> Result<
         if !table.contains_key(section_name) {
             let mut new_section = toml::map::Map::new();
             for key in [
-                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
-                "Q", "R", "S", "T",
-            ]
-            .iter()
-            {
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F",
+                "G",
+                "H",
+                "I",
+                "J",
+                "K",
+                "L",
+                "M",
+                "N",
+                "O",
+                "P",
+                "Q",
+                "R",
+                "S",
+                "T",
+            ].iter() {
                 new_section.insert(key.to_string(), Value::String("".to_string()));
             }
             table.insert(section_name.to_string(), Value::Table(new_section));
         }
     }
 
-    let toml_string =
-        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(func_toml_path, toml_string)?;
     Ok(())
 }
@@ -1861,8 +1996,7 @@ fn delete_section_from_file(section_name: &str, func_toml_path: &Path) -> Result
         table.remove(section_name);
     }
 
-    let toml_string =
-        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(func_toml_path, toml_string)?;
     Ok(())
 }
@@ -1871,7 +2005,7 @@ fn delete_section_from_file(section_name: &str, func_toml_path: &Path) -> Result
 fn clone_section_in_file(
     source_section: &str,
     target_section: &str,
-    func_toml_path: &Path,
+    func_toml_path: &Path
 ) -> Result<(), io::Error> {
     let mut value = if func_toml_path.exists() {
         let content = fs::read_to_string(func_toml_path)?;
@@ -1886,8 +2020,7 @@ fn clone_section_in_file(
         }
     }
 
-    let toml_string =
-        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(func_toml_path, toml_string)?;
     Ok(())
 }
@@ -1897,14 +2030,10 @@ fn create_and_load_new_section(
     current_section: &Arc<RwLock<String>>,
     inputs: &mut Vec<String>,
     func_toml_path: &Path,
-    clone: bool,
+    clone: bool
 ) -> io::Result<()> {
     let current_section_name = current_section.read().unwrap().clone();
-    let new_section_name = format!(
-        "{}_{}",
-        current_section_name,
-        generate_random_section_name()
-    );
+    let new_section_name = format!("{}_{}", current_section_name, generate_random_section_name());
 
     if clone {
         clone_section_in_file(&current_section_name, &new_section_name, func_toml_path)?;
@@ -1921,7 +2050,7 @@ fn create_and_load_new_section(
 fn rename_section_in_file(
     current_section: &str,
     new_section: &str,
-    func_toml_path: &Path,
+    func_toml_path: &Path
 ) -> Result<(), io::Error> {
     let mut value = if func_toml_path.exists() {
         let content = fs::read_to_string(func_toml_path)?;
@@ -1936,8 +2065,7 @@ fn rename_section_in_file(
         }
     }
 
-    let toml_string =
-        toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+    let toml_string = toml::to_string(&value).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
     fs::write(func_toml_path, toml_string)?;
     Ok(())
 }
@@ -1965,11 +2093,7 @@ fn align_hash_comments(inputs: &mut Vec<String>, current_row: &mut usize, curren
         .filter_map(|input| {
             let hash_pos = input.find('#');
             if let Some(pos) = hash_pos {
-                if pos > 0 {
-                    Some(pos)
-                } else {
-                    None
-                }
+                if pos > 0 { Some(pos) } else { None }
             } else {
                 None
             }
@@ -1998,7 +2122,7 @@ fn align_hash_comments(inputs: &mut Vec<String>, current_row: &mut usize, curren
 fn remove_spaces_before_hash(
     inputs: &mut Vec<String>,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) {
     for (i, input) in inputs.iter_mut().enumerate() {
         if let Some(hash_pos) = input.find('#') {
@@ -2025,21 +2149,24 @@ fn jump_to_input_box(
     stdout: &mut io::Stdout,
     inputs: &Vec<String>,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) -> io::Result<()> {
     // 移动到第1行第18列
     execute!(stdout, cursor::MoveTo(18, 1), Print("Jump to = "))?;
     stdout.flush()?;
 
-    if let Event::Key(KeyEvent {
-        code: KeyCode::Char(c),
-        modifiers: KeyModifiers::NONE,
-        kind: KeyEventKind::Press,
-        ..
-    }) = read()?
+    if
+        let Event::Key(
+            KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers: KeyModifiers::NONE,
+                kind: KeyEventKind::Press,
+                ..
+            },
+        ) = read()?
     {
         if c.is_ascii_alphabetic() && c.to_ascii_uppercase() <= 'T' {
-            let target_row = (c.to_ascii_uppercase() as u8 - b'A') as usize;
+            let target_row = ((c.to_ascii_uppercase() as u8) - b'A') as usize;
             if target_row < inputs.len() {
                 *current_row = target_row;
                 *current_pos = inputs[*current_row].len();
@@ -2047,12 +2174,7 @@ fn jump_to_input_box(
         }
     }
     //execute!(stdout, cursor::Hide)?;
-    execute!(
-        stdout,
-        cursor::Hide,
-        cursor::MoveTo(18, 1),
-        Clear(ClearType::CurrentLine)
-    )?;
+    execute!(stdout, cursor::Hide, cursor::MoveTo(18, 1), Clear(ClearType::CurrentLine))?;
     Ok(())
 }
 
@@ -2060,7 +2182,7 @@ fn jump_to_input_box(
 fn move_cursor_to_next_word(
     inputs: &Vec<String>,
     current_row: &mut usize,
-    current_pos: &mut usize,
+    current_pos: &mut usize
 ) {
     let current_line = &inputs[*current_row];
 
@@ -2079,4 +2201,3 @@ fn move_cursor_to_next_word(
         *current_pos = current_line.len(); // 如果没有找到下一个单词，则移动到行尾
     }
 }
-
