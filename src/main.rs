@@ -395,13 +395,10 @@ fn run_app(
     let mut current_pos = 0;
     let input_width = 60;
     let output_width = 20;
-    let title =
-        " RS Mathematical Tools                                                             V1.2.9 ";
-    let heade =
-        "                  Result  =  Mathematical Expression                                  ";
-    let foote =
-        " About | Rate | Fc:Sec | Clear | New | Delete | Clone | Rename | Set     github.com/pasdq ";
-    let saved = "                             Recalculate & Save to";
+    let title =" RS Mathematical Tools                                                             V1.2.9 ";
+    let heade ="                  Result  =  Mathematical Expression                                  ";
+    let foote =" About | Rate | Clear | New | Delete | Clone | Rename | Set | F12        github.com/pasdq ";
+    let saved ="                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
     let default_attribute = custom_attribute.unwrap_or_else(|| "Underlined".to_string());
@@ -878,7 +875,8 @@ fn run_app(
                                         for (i, line) in lines.iter().enumerate() {
                                             inputs[i] = line.to_string();
                                         }
-                                        current_pos = inputs[current_row].len();
+				current_pos = 0;
+                            current_row = 0;
                                     }
                                     Err(e) => {
                                         inputs[current_row].clear();
