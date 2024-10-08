@@ -878,8 +878,9 @@ fn run_app(
                                         for (i, line) in lines.iter().enumerate() {
                                             inputs[i] = line.to_string();
                                         }
-                                        current_pos = 0;
-                                        current_row = 0;
+
+                                        current_row = inputs.len() - 1;
+                                        current_pos = inputs[current_row].len();
                                     }
                                     Err(e) => {
                                         inputs[current_row].clear();
@@ -1186,6 +1187,53 @@ fn run_app(
                                     }
                                 }
                                 current_pos = inputs[current_row].len();
+                            } else if
+                                // 添加 save 命令的逻辑
+                                cfg!(target_os = "windows") &&
+                                input_command == "sv"
+                            {
+                                // 获取当前可执行文件所在的目录
+                                let exe_path = env::current_exe().unwrap();
+                                let exe_dir = exe_path.parent().unwrap();
+                                let saved_bcx_path = exe_dir.join("saved.bcx");
+
+                                // 调用函数保存当前 section 到 saved.bcx
+                                if
+                                    let Err(e) = save_current_section_to_bcx(
+                                        &inputs,
+                                        &saved_bcx_path
+                                    )
+                                {
+                                    inputs[current_row].clear();
+                                    inputs[current_row].push_str(
+                                        &format!("Failed to save saved.bcx: {}", e)
+                                    );
+                                    current_pos = inputs[current_row].len();
+                                } else {
+                                    // 使用 notepad3.exe 打开 saved.bcx
+                                    let notepad3_path = exe_dir
+                                        .join("notepad3")
+                                        .join("notepad3.exe");
+
+                                    let output = std::process::Command
+                                        ::new(notepad3_path)
+                                        .arg(&saved_bcx_path)
+                                        .spawn(); // 非阻塞启动
+
+                                    match output {
+                                        Ok(_) => {
+                                            inputs[current_row].clear();
+                                            //inputs[current_row].push_str("saved.bcx opened successfully!");
+                                        }
+                                        Err(_) => {
+                                            inputs[current_row].clear();
+                                            inputs[current_row].push_str(
+                                                "Failed to open saved.bcx with notepad3!"
+                                            );
+                                        }
+                                    }
+                                    current_pos = inputs[current_row].len();
+                                }
                             } else if cfg!(target_os = "windows") && input_command == "help" {
                                 // 获取当前可执行文件所在的目录
                                 let exe_path = env::current_exe().unwrap();
@@ -2237,4 +2285,37 @@ fn move_cursor_to_next_word(
     } else {
         *current_pos = current_line.len(); // 如果没有找到下一个单词，则移动到行尾
     }
+}
+
+// 保存当前 section 到 saved.bcx 的函数
+fn save_current_section_to_bcx(
+    inputs: &[String], 
+    filename: &Path
+) -> io::Result<()> {
+    let mut file = fs::File::create(filename)?;
+
+    for (i, input) in inputs.iter().enumerate() {
+        let label = (b'A' + i as u8) as char;
+
+        // 如果输入为空，跳过保存
+        if input.trim().is_empty() || input.trim().eq_ignore_ascii_case("sv") {
+            continue;
+        }
+
+        // 分离注释部分
+        let parts: Vec<&str> = input.splitn(2, '#').collect();
+        let expression = parts[0].trim(); // 数学表达式部分
+        let comment = if parts.len() > 1 { parts[1].trim() } else { "" }; // 注释部分
+
+        // 直接保存数学表达式，如果有注释，则将 `#` 替换为 `//`
+        if !expression.is_empty() {
+            if !comment.is_empty() {
+                writeln!(file, "{} := {} // {}", label, expression, comment)?;
+            } else {
+                writeln!(file, "{} := {}", label, expression)?;
+            }
+        }
+    }
+
+    Ok(())
 }
