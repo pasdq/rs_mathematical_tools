@@ -1110,7 +1110,11 @@ fn run_app(
                                     inputs[current_row].push_str("Invalid new section name.");
                                     current_pos = inputs[current_row].len();
                                 }
-                            } else if input_command == "new" {
+                            }
+
+			    else if input_command == "exit" {break;}
+
+			    else if input_command == "new" {
                                 create_and_load_new_section(
                                     &current_section,
                                     inputs,
@@ -2289,7 +2293,7 @@ fn move_cursor_to_next_word(
 
 // 保存当前 section 到 saved.bcx 的函数
 fn save_current_section_to_bcx(
-    inputs: &[String], 
+    inputs: &[String],
     filename: &Path
 ) -> io::Result<()> {
     let mut file = fs::File::create(filename)?;
