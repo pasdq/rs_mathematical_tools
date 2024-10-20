@@ -49,7 +49,7 @@ use std::sync::Mutex;
 lazy_static! {
     static ref GLOBAL_SUM: Mutex<f64> = Mutex::new(0.0);
     static ref GLOBAL_COUNT: Mutex<usize> = Mutex::new(0);
-    static ref DECIMAL_PLACES: Mutex<usize> = Mutex::new(4); // 设置默认保留四位小数
+    static ref DECIMAL_PLACES: Mutex<usize> = Mutex::new(4); // 设置默认保留四位小数, 全局参数, 可改3或4
 }
 
 #[derive(Parser, Debug)]
@@ -1110,11 +1110,9 @@ fn run_app(
                                     inputs[current_row].push_str("Invalid new section name.");
                                     current_pos = inputs[current_row].len();
                                 }
-                            }
-
-			    else if input_command == "exit" {break;}
-
-			    else if input_command == "new" {
+                            } else if input_command == "exit" {
+                                break;
+                            } else if input_command == "new" {
                                 create_and_load_new_section(
                                     &current_section,
                                     inputs,
@@ -1248,11 +1246,12 @@ fn run_app(
 
                                 // 检查文件是否存在
                                 if pdf_path.exists() {
-                                    // 使用默认的 PDF 阅读器打开 help.pdf
+                                    // 直接用 std::process::Command 启动命令，确保非阻塞，并不依赖 cmd.exe
+                                    let reader = "D:\\tools\\PDF-XChange Viewer\\PDFXCview.exe"; // 指定默认 PDF 阅读器
                                     let output = std::process::Command
-                                        ::new("cmd")
-                                        .args(&["/C", "start", "", pdf_path.to_str().unwrap()])
-                                        .spawn(); // 非阻塞启动
+                                        ::new(reader)
+                                        .arg(pdf_path.to_str().unwrap())
+                                        .spawn();
 
                                     match output {
                                         Ok(_) => {
@@ -2292,14 +2291,11 @@ fn move_cursor_to_next_word(
 }
 
 // 保存当前 section 到 saved.bcx 的函数
-fn save_current_section_to_bcx(
-    inputs: &[String],
-    filename: &Path
-) -> io::Result<()> {
+fn save_current_section_to_bcx(inputs: &[String], filename: &Path) -> io::Result<()> {
     let mut file = fs::File::create(filename)?;
 
     for (i, input) in inputs.iter().enumerate() {
-        let label = (b'A' + i as u8) as char;
+        let label = (b'A' + (i as u8)) as char;
 
         // 如果输入为空，跳过保存
         if input.trim().is_empty() || input.trim().eq_ignore_ascii_case("sv") {
