@@ -893,8 +893,8 @@ fn run_app(
                                             inputs[i] = processed_line;
                                         }
 
-                                        current_row = inputs.len() - 1;
-                                        current_pos = inputs[current_row].len();
+					// 移动光标到最底
+                                        //current_row = inputs.len() - 1; current_pos = inputs[current_row].len();
 
                                         // START 将保存成功信息显示在第23行
                                         execute!(stdout, cursor::Hide).unwrap();
@@ -908,7 +908,7 @@ fn run_app(
                                         stdout.flush().unwrap();
 
                                         // 等待200毫秒
-                                        std::thread::sleep(std::time::Duration::from_millis(300));
+                                        std::thread::sleep(std::time::Duration::from_millis(100));
 
                                         // 覆盖第23行内容
                                         execute!(
@@ -1029,7 +1029,7 @@ fn run_app(
                                 stdout.flush().unwrap();
 
                                 // 等待200毫秒
-                                std::thread::sleep(std::time::Duration::from_millis(300));
+                                std::thread::sleep(std::time::Duration::from_millis(100));
 
                                 // 覆盖第23行内容
                                 execute!(
@@ -1064,7 +1064,7 @@ fn run_app(
                             stdout.flush().unwrap();
 
                             // 等待200毫秒
-                            std::thread::sleep(std::time::Duration::from_millis(300));
+                            std::thread::sleep(std::time::Duration::from_millis(100));
 
                             // 覆盖第23行内容
                             execute!(
@@ -1102,7 +1102,7 @@ fn run_app(
                             stdout.flush().unwrap();
 
                             // 等待200毫秒
-                            std::thread::sleep(std::time::Duration::from_millis(300));
+                            std::thread::sleep(std::time::Duration::from_millis(100));
 
                             // 覆盖第23行内容
                             execute!(
