@@ -400,7 +400,7 @@ fn run_app(
     let heade =
         "                  Result  =  Mathematical Expression                                  ";
     let foote =
-        " About | Rate | Clear | New | Delete | Set | F10 (OUT) | F12 (IN)        github.com/pasdq ";
+        " About | Rate | Clear | New | Delete | Rename                            github.com/pasdq ";
     let saved = "                             Recalculate & Save to";
     let mut show_saved_message = false;
     let default_color = custom_color.unwrap_or_else(|| "Green".to_string());
@@ -859,84 +859,6 @@ fn run_app(
                         }
                     }
 
-                    (KeyCode::F(12), KeyEventKind::Press) => {
-                        if !is_locked {
-                            let exe_path = env::current_exe().unwrap();
-                            let exe_dir = exe_path.parent().unwrap();
-                            let import_txt_path = exe_dir.join("saved.bcx");
-
-                            if import_txt_path.exists() {
-                                match fs::read_to_string(import_txt_path) {
-                                    Ok(content) => {
-                                        // 清空当前 section 的前 17 行
-                                        for input in inputs.iter_mut().take(17) {
-                                            input.clear();
-                                        }
-
-                                        // 处理 saved.bcx 文件的内容
-                                        let lines: Vec<&str> = content.lines().take(17).collect();
-                                        for (i, line) in lines.iter().enumerate() {
-                                            // 逐行替换 // 为 #
-                                            let mut processed_line = line.replace("//", "#");
-
-                                            // 如果不是空行，在行头加上 # 符号
-                                            if !processed_line.trim().is_empty() {
-                                                processed_line = format!("#{}", processed_line);
-                                            }
-
-                                            // 检查并处理包含 := 的行
-                                            if let Some(pos) = processed_line.find(":=") {
-                                                let (_, rest) = processed_line.split_at(pos + 2); // 保留 := 之后的部分
-                                                processed_line = rest.trim().to_string();
-                                            }
-
-                                            inputs[i] = processed_line;
-                                        }
-
-					// 移动光标到最底
-                                        //current_row = inputs.len() - 1; current_pos = inputs[current_row].len();
-
-                                        // START 将保存成功信息显示在第23行
-                                        execute!(stdout, cursor::Hide).unwrap();
-                                        execute!(
-                                            stdout,
-                                            cursor::MoveTo(29, 23),
-                                            SetForegroundColor(Color::DarkYellow),
-                                            Print("Data import was successful!"),
-                                            ResetColor
-                                        ).unwrap();
-                                        stdout.flush().unwrap();
-
-                                        // 等待200毫秒
-                                        std::thread::sleep(std::time::Duration::from_millis(100));
-
-                                        // 覆盖第23行内容
-                                        execute!(
-                                            stdout,
-                                            cursor::MoveTo(0, 23),
-                                            Clear(ClearType::CurrentLine)
-                                        ).unwrap();
-                                        stdout.flush().unwrap();
-                                        // END 将保存成功信息显示在第23行
-                                    }
-                                    Err(e) => {
-                                        inputs[current_row].clear();
-                                        inputs[current_row].push_str(
-                                            &format!("Failed to read saved.bcx: {}", e)
-                                        );
-                                        current_pos = inputs[current_row].len();
-                                    }
-                                }
-                            } else {
-                                inputs[current_row].clear();
-                                inputs[current_row].push_str(
-                                    "saved.bcx does not exist in the current directory."
-                                );
-                                current_pos = inputs[current_row].len();
-                            }
-                        }
-                    }
-
                     (KeyCode::Char('l'), KeyEventKind::Press) if
                         modifiers.contains(KeyModifiers::CONTROL)
                     => {
@@ -1074,44 +996,6 @@ fn run_app(
                             ).unwrap();
                             stdout.flush().unwrap();
                             // END 将保存成功信息显示在第23行
-                        }
-                    }
-
-                    #[cfg(target_os = "windows")]
-                    (KeyCode::F(10), KeyEventKind::Press) => {
-                        let exe_path = env::current_exe().unwrap();
-                        let exe_dir = exe_path.parent().unwrap();
-                        let saved_bcx_path = exe_dir.join("saved.bcx");
-
-                        if let Err(e) = save_current_section_to_bcx(&inputs, &saved_bcx_path) {
-                            inputs[current_row].clear();
-                            inputs[current_row].push_str(
-                                &format!("Failed to save saved.bcx: {}", e)
-                            );
-                            current_pos = inputs[current_row].len();
-                        } else {
-                            execute!(stdout, cursor::Hide).unwrap();
-                            // 将保存成功信息显示在第23行
-                            execute!(
-                                stdout,
-                                cursor::MoveTo(29, 23),
-                                SetForegroundColor(Color::DarkYellow),
-                                Print("Data export was successful!"),
-                                ResetColor
-                            ).unwrap();
-                            stdout.flush().unwrap();
-
-                            // 等待200毫秒
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-
-                            // 覆盖第23行内容
-                            execute!(
-                                stdout,
-                                cursor::MoveTo(0, 23),
-                                Clear(ClearType::CurrentLine)
-                            ).unwrap();
-                            stdout.flush().unwrap();
-                            //execute!(stdout, cursor::Show).unwrap();
                         }
                     }
 
@@ -1285,37 +1169,6 @@ fn run_app(
                                     current_pos = 0;
                                     current_row = 0;
                                 }
-                            } else if cfg!(target_os = "windows") && input_command == "set" {
-                                // 获取当前可执行文件所在的目录
-                                let exe_path = env::current_exe().unwrap();
-                                let exe_dir = exe_path.parent().unwrap();
-
-                                // 设置 notepad3.exe 的路径，位于子目录 notepad3 中
-                                let notepad3_path = exe_dir.join("notepad3").join("notepad3.exe");
-
-                                // 设置 saved.bcx 的路径，位于当前目录
-                                let toml_path = exe_dir.join("saved.bcx");
-
-                                // 启动 notepad3.exe 并打开 saved.bcx
-                                let output = std::process::Command
-                                    ::new(notepad3_path)
-                                    .arg(toml_path) // 使用当前目录下的 saved.bcx
-                                    .spawn(); // 非阻塞启动
-
-                                match output {
-                                    Ok(_) => {
-                                        // inputs[current_row].clear();
-                                        // inputs[current_row].push_str("notepad3.exe started successfully!");
-                                        inputs[current_row].clear();
-                                    }
-                                    Err(_) => {
-                                        inputs[current_row].clear();
-                                        inputs[current_row].push_str(
-                                            "Failed to start notepad3/notepad3.exe!"
-                                        );
-                                    }
-                                }
-                                current_pos = inputs[current_row].len();
                             } else if cfg!(target_os = "windows") && input_command == "help" {
                                 // 获取当前可执行文件所在的目录
                                 let exe_path = env::current_exe().unwrap();
@@ -2368,50 +2221,4 @@ fn move_cursor_to_next_word(
     } else {
         *current_pos = current_line.len(); // 如果没有找到下一个单词，则移动到行尾
     }
-}
-
-// 保存当前 section 到 saved.bcx 的函数
-#[cfg(target_os = "windows")]
-fn save_current_section_to_bcx(inputs: &[String], filename: &Path) -> io::Result<()> {
-    let mut file = fs::File::create(filename)?;
-
-    for input in inputs.iter() {
-        // 如果输入为空，输出空行
-        if input.trim().is_empty() {
-            writeln!(file)?;
-            continue;
-        }
-
-        let label = (b'A' +
-            (
-                inputs
-                    .iter()
-                    .position(|x| x == input)
-                    .unwrap() as u8
-            )) as char;
-
-        // 保留 # 开头行的所有空格
-        if input.trim_start().starts_with('#') {
-            // 保留行头的空格，只移除 # 并保留之后的内容
-            let cleaned_input = input.replacen('#', "", 1);
-            writeln!(file, "{}", cleaned_input)?;
-            continue;
-        }
-
-        // 分离注释部分
-        let parts: Vec<&str> = input.splitn(2, '#').collect();
-        let expression = parts[0].trim(); // 数学表达式部分
-        let comment = if parts.len() > 1 { parts[1].trim() } else { "" }; // 注释部分
-
-        // 直接保存数学表达式，如果有注释，则将 `#` 替换为 `//`
-        if !expression.is_empty() {
-            if !comment.is_empty() {
-                writeln!(file, "{} := {} // {}", label, expression, comment)?;
-            } else {
-                writeln!(file, "{} := {}", label, expression)?;
-            }
-        }
-    }
-
-    Ok(())
 }
