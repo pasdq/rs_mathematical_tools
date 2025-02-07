@@ -1542,10 +1542,13 @@ fn evaluate_and_solve(
     variables: &HashMap<String, String>,
     current_row: usize,
 ) -> Result<String, String> {
-    if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
-        return Ok("home".to_string());
+    // Special handling for `z` in R-T input rows
+    if (17..=19).contains(&current_row) && input.trim().eq_ignore_ascii_case("z") {
+        let global_sum = GLOBAL_SUM.lock().unwrap();
+        return Ok(format_with_thousands_separator(*global_sum));
     }
 
+    // Direct command handling
     if input.starts_with("fc:") {
         return Ok("Import from cfg file".to_string());
     }
@@ -1554,33 +1557,34 @@ fn evaluate_and_solve(
         return Ok("Qalculate!".to_string());
     }
 
-    // 移除输入中的千位分隔符
+    // Remove thousands separators and strip comments
     let input_without_commas = remove_thousands_separator(input);
-
-    // 分离表达式与注释部分
     let input_without_comment = match input_without_commas.find('#') {
         Some(pos) => &input_without_commas[..pos],
         None => &input_without_commas,
     };
+
     let parts: Vec<&str> = input_without_comment.split('=').collect();
 
     if parts.len() == 2 {
         let lhs = parts[0].replace(" ", "").replace("X", "x");
         let rhs = parts[1].replace(" ", "").replace("X", "x");
 
-        let lhs_replaced = replace_variables(lhs.clone(), variables);
-        let rhs_replaced = replace_variables(rhs.clone(), variables);
+        let lhs_replaced = replace_variables(lhs.clone(), variables).replace("/", "*1.0/");
+        let rhs_replaced = replace_variables(rhs.clone(), variables).replace("/", "*1.0/");
 
-        // 处理 `x` 在分母的情况
+        // Handle `x` in denominator
         if lhs.contains('/') {
             let split: Vec<&str> = lhs.split('/').collect();
             if split.len() == 2 && split[1].contains('x') {
                 let numerator = eval(&replace_percentage(split[0]))
-                    .map(|val| val.as_number().unwrap_or(0.0))
+                    .map_err(|_| "Invalid numerator.".to_string())?
+                    .as_number()
                     .unwrap_or(0.0);
 
                 let rhs_value = eval(&replace_percentage(&rhs_replaced))
-                    .map(|val| val.as_number().unwrap_or(0.0))
+                    .map_err(|_| "Invalid RHS.".to_string())?
+                    .as_number()
                     .unwrap_or(0.0);
 
                 if rhs_value == 0.0 {
@@ -1592,15 +1596,18 @@ fn evaluate_and_solve(
             }
         }
 
-        // 处理 `x` 在其他位置
+        // Handle linear equations with `x`
         let coefficient = eval(&replace_percentage(&lhs_replaced.replace("x", "1.0")))
-            .map(|val| val.as_number().unwrap_or(0.0))
+            .map_err(|_| "Invalid equation.".to_string())?
+            .as_number()
             .unwrap_or(0.0);
         let lhs_value = eval(&replace_percentage(&lhs_replaced.replace("x", "0.0")))
-            .map(|val| val.as_number().unwrap_or(0.0))
+            .map_err(|_| "Invalid equation.".to_string())?
+            .as_number()
             .unwrap_or(0.0);
         let rhs_value = eval(&replace_percentage(&rhs_replaced))
-            .map(|val| val.as_number().unwrap_or(0.0))
+            .map_err(|_| "Invalid RHS.".to_string())?
+            .as_number()
             .unwrap_or(0.0);
 
         if coefficient == 0.0 {
@@ -1610,8 +1617,14 @@ fn evaluate_and_solve(
         let result = (rhs_value - lhs_value) / coefficient;
         return Ok(format_with_thousands_separator(result));
     } else if parts.len() == 1 {
-        let expression = replace_variables(parts[0].replace(" ", ""), variables)
-            .replace("/", "*1.0/");
+        let mut expression = replace_variables(parts[0].replace(" ", ""), variables).replace("/", "*1.0/");
+
+        // Handle `z` in expressions
+        if expression.contains("z") {
+            let global_sum = GLOBAL_SUM.lock().unwrap();
+            expression = expression.replace("z", &global_sum.to_string());
+        }
+
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
                 let formatted_result = format_with_thousands_separator(result.as_number().unwrap_or(0.0));
@@ -1623,7 +1636,6 @@ fn evaluate_and_solve(
         Err("Invalid input format. Use a linear equation 'a*x + b = c' or a mathematical expression.".to_string())
     }
 }
-
 
 /// 将数学表达式中的百分比（例如 `50%`）替换为其小数等价物（例如 `0.5`）
 fn replace_percentage(expression: &str) -> String {
