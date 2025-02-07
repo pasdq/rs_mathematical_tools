@@ -396,7 +396,7 @@ fn run_app(
     let input_width = 60;
     let output_width = 20;
     let title =
-        " RS Mathematical Tools                                                             V1.2.9 ";
+        " RS Mathematical Tools                                                             V1.3.0 ";
     let heade =
         "                  Result  =  Mathematical Expression                                  ";
     let foote =
@@ -1180,7 +1180,7 @@ fn run_app(
                                 // 检查文件是否存在
                                 if pdf_path.exists() {
                                     // 直接用 std::process::Command 启动命令，确保非阻塞，并不依赖 cmd.exe
-                                    let reader = "D:\\tools\\PDF-XChange Viewer\\PDFXCview.exe"; // 指定默认 PDF 阅读器
+                                    let reader = "C:\\tools\\PDF-XChange Viewer\\PDFXCview.exe"; // 指定默认 PDF 阅读器
                                     let output = std::process::Command
                                         ::new(reader)
                                         .arg(pdf_path.to_str().unwrap())
@@ -1540,7 +1540,7 @@ fn save_inputs_to_file(
 fn evaluate_and_solve(
     input: &str,
     variables: &HashMap<String, String>,
-    current_row: usize
+    current_row: usize,
 ) -> Result<String, String> {
     if current_row <= 10 && input.trim().eq_ignore_ascii_case("z") {
         return Ok("home".to_string());
@@ -1554,92 +1554,76 @@ fn evaluate_and_solve(
         return Ok("Qalculate!".to_string());
     }
 
-    // 调用预处理函数，移除输入中的千位分隔符
+    // 移除输入中的千位分隔符
     let input_without_commas = remove_thousands_separator(input);
 
+    // 分离表达式与注释部分
     let input_without_comment = match input_without_commas.find('#') {
         Some(pos) => &input_without_commas[..pos],
         None => &input_without_commas,
     };
     let parts: Vec<&str> = input_without_comment.split('=').collect();
+
     if parts.len() == 2 {
         let lhs = parts[0].replace(" ", "").replace("X", "x");
         let rhs = parts[1].replace(" ", "").replace("X", "x");
-        let lhs_replaced = replace_variables(lhs, variables);
-        let rhs_replaced = replace_variables(rhs, variables);
-        let lhs_replaced = lhs_replaced.replace("/", "*1.0/");
-        let rhs_replaced = rhs_replaced.replace("/", "*1.0/");
-        if lhs_replaced.contains('x') || rhs_replaced.contains('x') {
-            let x = "x";
-            let lhs_value = match eval(&replace_percentage(&lhs_replaced.replace(x, "0.0"))) {
-                Ok(val) => val.as_number().unwrap_or(0.0),
-                Err(_) => {
-                    return Err("Error".to_string());
+
+        let lhs_replaced = replace_variables(lhs.clone(), variables);
+        let rhs_replaced = replace_variables(rhs.clone(), variables);
+
+        // 处理 `x` 在分母的情况
+        if lhs.contains('/') {
+            let split: Vec<&str> = lhs.split('/').collect();
+            if split.len() == 2 && split[1].contains('x') {
+                let numerator = eval(&replace_percentage(split[0]))
+                    .map(|val| val.as_number().unwrap_or(0.0))
+                    .unwrap_or(0.0);
+
+                let rhs_value = eval(&replace_percentage(&rhs_replaced))
+                    .map(|val| val.as_number().unwrap_or(0.0))
+                    .unwrap_or(0.0);
+
+                if rhs_value == 0.0 {
+                    return Err("Division by zero".to_string());
                 }
-            };
-            let rhs_value = match eval(&replace_percentage(&rhs_replaced.replace(x, "0.0"))) {
-                Ok(val) => val.as_number().unwrap_or(0.0),
-                Err(_) => {
-                    return Err("Error".to_string());
-                }
-            };
-            let coefficient = match eval(&replace_percentage(&lhs_replaced.replace(x, "1.0"))) {
-                Ok(val) => val.as_number().unwrap_or(0.0) - lhs_value,
-                Err(_) => {
-                    return Err("Error".to_string());
-                }
-            };
-            if coefficient == 0.0 {
-                return Err(
-                    "Invalid equation: coefficient of x is zero or not a linear equation".to_string()
-                );
-            }
-            let result = (rhs_value - lhs_value) / coefficient;
-            let formatted_result = format_with_thousands_separator(result);
-            Ok(formatted_result)
-        } else {
-            let lhs_value = match eval(&replace_percentage(&lhs_replaced)) {
-                Ok(val) => val.as_number().unwrap_or(0.0),
-                Err(_) => {
-                    return Err("Error".to_string());
-                }
-            };
-            let rhs_value = match eval(&replace_percentage(&rhs_replaced)) {
-                Ok(val) => val.as_number().unwrap_or(0.0),
-                Err(_) => {
-                    return Err("Error".to_string());
-                }
-            };
-            if lhs_value == rhs_value {
-                Ok(format_with_thousands_separator(lhs_value))
-            } else {
-                Err("The equation is not balanced".to_string())
+
+                let result = numerator / rhs_value;
+                return Ok(format_with_thousands_separator(result));
             }
         }
+
+        // 处理 `x` 在其他位置
+        let coefficient = eval(&replace_percentage(&lhs_replaced.replace("x", "1.0")))
+            .map(|val| val.as_number().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let lhs_value = eval(&replace_percentage(&lhs_replaced.replace("x", "0.0")))
+            .map(|val| val.as_number().unwrap_or(0.0))
+            .unwrap_or(0.0);
+        let rhs_value = eval(&replace_percentage(&rhs_replaced))
+            .map(|val| val.as_number().unwrap_or(0.0))
+            .unwrap_or(0.0);
+
+        if coefficient == 0.0 {
+            return Err("Invalid equation: coefficient of x is zero".to_string());
+        }
+
+        let result = (rhs_value - lhs_value) / coefficient;
+        return Ok(format_with_thousands_separator(result));
     } else if parts.len() == 1 {
-        let mut expression = replace_variables(parts[0].replace(" ", ""), variables);
-        expression = expression.replace("/", "*1.0/");
-
-        if expression.contains("z") {
-            let global_sum = GLOBAL_SUM.lock().unwrap();
-            expression = expression.replace("z", &global_sum.to_string());
-        }
-
+        let expression = replace_variables(parts[0].replace(" ", ""), variables)
+            .replace("/", "*1.0/");
         match eval(&replace_percentage(&expression)) {
             Ok(result) => {
-                let formatted_result = format_with_thousands_separator(
-                    result.as_number().unwrap_or(0.0)
-                );
+                let formatted_result = format_with_thousands_separator(result.as_number().unwrap_or(0.0));
                 Ok(formatted_result)
             }
             Err(_) => Err("Invalid mathematical expression.".to_string()),
         }
     } else {
-        Err(
-            "Invalid input format. Use a linear equation 'a*x + b = c' or a mathematical expression.".to_string()
-        )
+        Err("Invalid input format. Use a linear equation 'a*x + b = c' or a mathematical expression.".to_string())
     }
 }
+
 
 /// 将数学表达式中的百分比（例如 `50%`）替换为其小数等价物（例如 `0.5`）
 fn replace_percentage(expression: &str) -> String {
